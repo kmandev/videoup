@@ -295,7 +295,7 @@ alter table public.sources
 create table if not exists public.oauth_states (
   state       text primary key,
   user_id     uuid not null references auth.users(id) on delete cascade,
-  provider    text not null check (provider in ('gdrive','dropbox','onedrive')),
+  provider    text not null,   -- gdrive/dropbox/onedrive หรือ platform (youtube ฯลฯ)
   return_to   text,
   created_at  timestamptz not null default now()
 );
