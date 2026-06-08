@@ -114,6 +114,24 @@
       return j; // { added, total }
     },
 
+    // อัปโหลดไฟล์เข้า cloud source (ผ่าน Edge Function) → คืน video record
+    async uploadToSource(sourceId, file) {
+      if (!window.sb) demo();
+      const { data: { session } } = await window.sb.auth.getSession();
+      if (!session) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+      const fd = new FormData();
+      fd.append('sourceId', sourceId);
+      fd.append('file', file);
+      const res = await fetch(`${window.SUPABASE_URL}/functions/v1/upload-source`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: fd,
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'อัปโหลดไม่สำเร็จ');
+      return j.video;
+    },
+
     async listVideos(sourceId) {
       if (!window.sb) demo();
       let q = window.sb.from('videos').select('*').eq('status', 'ready').order('created_at', { ascending: false });

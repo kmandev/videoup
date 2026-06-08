@@ -16,10 +16,41 @@ const LINK_PH = {
   lazada:   "https://s.lazada.co.th/s.xxxx",
 };
 
-function CreatePost({ initialVid, initialDate, videos: propVideos, onPublish, onCancel }) {
+function CreatePost({ initialVid, initialDate, videos: propVideos, sources: propSources, onToast, onReload, onPublish, onCancel }) {
   // ใช้ videos จริงจาก Supabase ถ้ามี (live mode) ไม่งั้น fallback mock
   const allVideos = (propVideos && propVideos.length >= 0) ? propVideos : VIDEOS;
   const findVid = (id) => allVideos.find(v => v.id === id) || VID(id);
+  const live = window.API && window.API.isLive();
+  const fileRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  // รวมข้อมูล source จริง (account/path/storage) กับ mock (สี/ไอคอน/ชื่อ)
+  const srcRow = (type) => (propSources || []).find(s => s.type === type);
+  const srcInfo = (type) => {
+    const base = SRC(type) || {};
+    const row = srcRow(type);
+    if (!row) return base;
+    return { ...base, account: row.account || base.account, path: row.path || base.path,
+             used: row.used_gb ?? base.used, total: row.total_gb ?? base.total };
+  };
+
+  // อัปโหลดไฟล์เข้า source ปัจจุบัน
+  const doUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!live) { onToast?.({ kind: "publishing", title: "อัปโหลดแล้ว (demo)", desc: file.name }); return; }
+    const row = srcRow(activeSource);
+    if (!row) { onToast?.({ kind: "scheduled", title: "ยังไม่ได้เชื่อมต่อ source นี้", desc: "เชื่อมต่อก่อนในหน้าตั้งค่า" }); return; }
+    setUploading(true);
+    try {
+      await window.API.uploadToSource(row.id, file);
+      onToast?.({ kind: "publishing", title: "อัปโหลดสำเร็จ ✓", desc: file.name });
+      await onReload?.();
+    } catch (err) {
+      onToast?.({ kind: "scheduled", title: "อัปโหลดไม่สำเร็จ", desc: err.message });
+    } finally { setUploading(false); }
+  };
   const [vid, setVid] = useState(initialVid || null);
   // source filter for the library (defaults to the selected video's source, or gdrive)
   const [activeSource, setActiveSource] = useState(() => (initialVid && findVid(initialVid)?.source) || "gdrive");
@@ -61,7 +92,7 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, onPublish, on
   const cur = content[tab] || CONTENT_TPL[tab];
   const canPublish = vid && selectedPlats.length > 0;
   const filtered = allVideos.filter(x => x.source === activeSource);
-  const src = SRC(activeSource);
+  const src = srcInfo(activeSource);
 
   const doPublish = () => {
     if (!canPublish) return;
@@ -123,7 +154,10 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, onPublish, on
                 <div style={{ width: 90, marginTop: 4 }}><Bar value={src.used} max={src.total} color={src.color} height={4} /></div>
               </div>
             )}
-            <Btn size="sm" variant="ghost" icon="upload">อัปโหลด</Btn>
+            <input ref={fileRef} type="file" accept="video/*" style={{ display: "none" }} onChange={doUpload} />
+            <Btn size="sm" variant="ghost" icon="upload" disabled={uploading} onClick={() => fileRef.current?.click()}>
+              {uploading ? "กำลังอัปโหลด..." : "อัปโหลด"}
+            </Btn>
           </div>
 
           {/* VIDEO GRID */}
@@ -135,18 +169,24 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, onPublish, on
             </div>
           ) : (
             <div className="vid-grid">
-              {filtered.map(x => (
-                <div key={x.id} className={`vid-pick ${vid === x.id ? "on" : ""}`} onClick={() => setVid(x.id)} style={{ background: x.cover }}>
+              {filtered.map(x => {
+                const isUrl = typeof x.cover === "string" && /^https?:\/\//.test(x.cover);
+                const coverStyle = isUrl
+                  ? { backgroundImage: `url(${x.cover})`, backgroundSize: "cover", backgroundPosition: "center" }
+                  : { background: x.cover };
+                return (
+                <div key={x.id} className={`vid-pick ${vid === x.id ? "on" : ""}`} onClick={() => setVid(x.id)} style={coverStyle}>
                   <div className="chk"><Icon name="check" size={13} /></div>
-                  <span className="src-flag" title={SRC(x.source).name} style={{ background: SRC(x.source).color }}>
-                    <Icon name={SRC(x.source).icon} size={9} />
+                  <span className="src-flag" title={SRC(x.source).name} style={{ background: "#fff" }}>
+                    <Icon name={SRC(x.source).icon} size={11} />
                   </span>
                   <span className="dur" style={{ position: "absolute", right: 6, top: 6, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 9.5, fontWeight: 700, padding: "1px 5px", borderRadius: 5, fontFamily: "var(--font-mono)" }}>
                     {x.dur}s
                   </span>
                   <span className="vname">{x.title}</span>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

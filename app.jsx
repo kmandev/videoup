@@ -23,7 +23,6 @@ const NAV = [
 ];
 const BIZ_NAV = [
   { id: "billing",  label: "แพ็กเกจ & การเงิน", en: "Billing",  icon: "star" },
-  { id: "settings", label: "ตั้งค่า",           en: "Settings", icon: "settings" },
 ];
 const PAGE_SUB = {
   dashboard: "ภาพรวมการอัปโหลดทุกแพลตฟอร์ม",
@@ -44,12 +43,30 @@ function App() {
   const [upgradeTo, setUpgradeTo] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  // real posts + videos from Supabase (live mode), fallback to mock
+  // real posts + videos + sources from Supabase (live mode), fallback to mock
   const [livePosts, setLivePosts] = useState(null);   // null = ยังไม่โหลด, [] = โหลดแล้วแต่ว่าง
   const [liveVideos, setLiveVideos] = useState(null);
+  const [liveSources, setLiveSources] = useState(null);
 
-  const posts  = livePosts  !== null ? livePosts  : POSTS;
-  const videos = liveVideos !== null ? liveVideos : VIDEOS;
+  const posts   = livePosts   !== null ? livePosts   : POSTS;
+  const videos  = liveVideos  !== null ? liveVideos  : VIDEOS;
+  const sources = liveSources !== null ? liveSources : SOURCE_LIST.filter(id => id !== "url").map(id => ({ ...SOURCES[id], type: id }));
+
+  // reload videos+sources (เรียกหลัง upload/sync)
+  const reloadLibrary = async () => {
+    if (!window.API || !window.API.isLive()) return;
+    try {
+      const srcs = await window.API.listSources();
+      setLiveSources(srcs || []);
+      const byId = {}; (srcs || []).forEach(s => { byId[s.id] = s.type; });
+      const vids = await window.API.listVideos();
+      setLiveVideos((vids || []).map(v => ({
+        id: v.id, title: v.title, dur: v.duration || 0, size: v.size_mb || 0,
+        cover: v.cover || "linear-gradient(135deg,#6C4DFF,#2D7BFF)",
+        source: byId[v.source_id] || "gdrive", source_id: v.source_id, file_path: v.file_path,
+      })));
+    } catch (e) { console.warn("[VideoUp] reload library:", e.message); }
+  };
 
   // load user — ดึง profile จริงจาก Supabase ใน live mode, fallback mock ใน demo
   const mockUser = (() => { try { return JSON.parse(localStorage.getItem("videoup_user")); } catch { return null; } })() || { name: "ViralShop TH", email: "viralshop@gmail.com", avatar: "V" };
@@ -83,23 +100,19 @@ function App() {
         setLivePosts(data || []);
       } catch (e) { console.warn("[VideoUp] โหลด posts ไม่สำเร็จ:", e.message); setLivePosts([]); }
 
-      // โหลด videos จริงจาก Supabase (ทุก source ที่เชื่อมต่อแล้ว)
+      // โหลด sources + videos จริงจาก Supabase
       try {
-        const sources = await window.API.listSources();
-        const byId = {}; (sources || []).forEach(s => { byId[s.id] = s.type; });
+        const srcs = await window.API.listSources();
+        setLiveSources(srcs || []);
+        const byId = {}; (srcs || []).forEach(s => { byId[s.id] = s.type; });
         const vids = await window.API.listVideos(); // ดึงทั้งหมดของ user
-        // normalize ให้ตรงรูปแบบที่ screen ใช้ (source=type, dur, size)
         const norm = (vids || []).map(v => ({
-          id: v.id,
-          title: v.title,
-          dur: v.duration || 0,
-          size: v.size_mb || 0,
+          id: v.id, title: v.title, dur: v.duration || 0, size: v.size_mb || 0,
           cover: v.cover || "linear-gradient(135deg,#6C4DFF,#2D7BFF)",
-          source: byId[v.source_id] || "gdrive",
-          file_path: v.file_path,
+          source: byId[v.source_id] || "gdrive", source_id: v.source_id, file_path: v.file_path,
         }));
         setLiveVideos(norm);
-      } catch (e) { console.warn("[VideoUp] โหลด videos ไม่สำเร็จ:", e.message); setLiveVideos([]); }
+      } catch (e) { console.warn("[VideoUp] โหลด library ไม่สำเร็จ:", e.message); setLiveSources([]); setLiveVideos([]); }
     })();
   }, []);
 
@@ -190,7 +203,8 @@ function App() {
   else if (route === "billing")  screen = <Billing currentPlan={plan} onChangePlan={requestPlan} onToast={pushToast} />;
   else if (route === "settings") screen = <Settings onToast={pushToast} user={user} />;
   else screen = <CreatePost initialVid={createSeed.vid} initialDate={createSeed.date}
-                   videos={videos} onPublish={handlePublish} onCancel={() => go("dashboard")} />;
+                   videos={videos} sources={sources} onToast={pushToast} onReload={reloadLibrary}
+                   onPublish={handlePublish} onCancel={() => go("dashboard")} />;
 
   const cur = [...NAV, ...BIZ_NAV].find(n => n.id === route) || NAV[0];
 
@@ -226,16 +240,26 @@ function App() {
           <div style={{ width: 30, height: 30, borderRadius: 9, background: "linear-gradient(135deg,var(--brand),var(--brand-2))", color: "#fff", display: "grid", placeItems: "center", flex: "none" }}><Icon name="star" size={15} fill={true} /></div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "var(--brand)" }}>แพ็กเกจ {PLAN(plan).name}</div>
-            <div style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 600 }}>{USAGE.clipsUsed}/{PLAN(plan).limits.clips} คลิปเดือนนี้</div>
+            <div style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 600 }}>{posts.length}/{PLAN(plan).limits.clips} โพสต์</div>
           </div>
           <Icon name="chevR" size={15} style={{ color: "var(--brand)" }} />
         </button>
-        <div className="device-pill">
-          <div className="row"><Icon name="drive" size={15} style={{ color: "var(--warn)" }} /><span className="lbl">Drive</span>
-            <span className="val">{DRIVE.usedGB}/{DRIVE.totalGB}GB</span></div>
-          <div className="row"><Icon name="upload" size={15} style={{ color: "var(--brand)" }} /><span className="lbl">คลัง</span>
-            <span className="val">{DRIVE.folder}</span></div>
-        </div>
+        {(() => {
+          // source หลัก (ตัวแรกที่เชื่อมต่อ) — แสดง storage จริง
+          const ps = (sources || []).find(s => (s.used_gb ?? s.used ?? 0) > 0 || s.total_gb > 0) || (sources || [])[0];
+          const usedGB = ps ? (ps.used_gb ?? ps.used ?? 0) : 0;
+          const totalGB = ps ? (ps.total_gb ?? ps.total ?? 0) : 0;
+          const folder = ps ? (ps.path || "—") : "—";
+          const label = ps ? (SOURCES[ps.type]?.short || "Storage") : "Storage";
+          return (
+            <div className="device-pill">
+              <div className="row"><Icon name={ps ? (SOURCES[ps.type]?.icon || "drive") : "drive"} size={15} style={{ color: "var(--warn)" }} /><span className="lbl">{label}</span>
+                <span className="val">{totalGB > 0 ? `${usedGB}/${totalGB}GB` : "—"}</span></div>
+              <div className="row"><Icon name="film" size={15} style={{ color: "var(--brand)" }} /><span className="lbl">คลัง</span>
+                <span className="val">{videos.length} คลิป</span></div>
+            </div>
+          );
+        })()}
       </div>
     </>
   );

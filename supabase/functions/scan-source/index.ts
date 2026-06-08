@@ -84,9 +84,40 @@ async function freshToken(source: any): Promise<string> {
 }
 
 const isVideoName = (n: string) => /\.(mp4|mov|m4v|webm|avi|mkv)$/i.test(n || "");
+const GB = 1073741824;
+
+// อัปโหลด thumbnail bytes ลง Supabase Storage bucket 'covers' → คืน public URL
+async function storeThumb(userId: string, key: string, bytes: Uint8Array, contentType = "image/jpeg"): Promise<string | null> {
+  try {
+    const path = `${userId}/${key}.jpg`;
+    const up = await admin.storage.from("covers").upload(path, bytes, { contentType, upsert: true });
+    if (up.error) { console.error("storage upload", up.error); return null; }
+    const { data } = admin.storage.from("covers").getPublicUrl(path);
+    return data.publicUrl;
+  } catch (e) { console.error("storeThumb", e); return null; }
+}
+
+// ---------- Storage quota ----------
+async function quotaGdrive(token: string) {
+  const r = await fetch("https://www.googleapis.com/drive/v3/about?fields=storageQuota", { headers: { Authorization: `Bearer ${token}` } });
+  const j = await r.json();
+  const q = j.storageQuota || {};
+  return { used_gb: q.usage ? +(Number(q.usage) / GB).toFixed(1) : 0, total_gb: q.limit ? +(Number(q.limit) / GB).toFixed(1) : 0 };
+}
+async function quotaDropbox(token: string) {
+  const r = await fetch("https://api.dropboxapi.com/2/users/get_space_usage", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  const j = await r.json();
+  return { used_gb: j.used ? +(j.used / GB).toFixed(1) : 0, total_gb: j.allocation?.allocated ? +(j.allocation.allocated / GB).toFixed(1) : 0 };
+}
+async function quotaOnedrive(token: string) {
+  const r = await fetch("https://graph.microsoft.com/v1.0/me/drive?$select=quota", { headers: { Authorization: `Bearer ${token}` } });
+  const j = await r.json();
+  const q = j.quota || {};
+  return { used_gb: q.used ? +(q.used / GB).toFixed(1) : 0, total_gb: q.total ? +(q.total / GB).toFixed(1) : 0 };
+}
 
 // ---------- Google Drive ----------
-async function scanGdrive(token: string, path: string) {
+async function scanGdrive(token: string, path: string, userId: string) {
   // หา folder ID จาก path (เช่น /VideoUp/clips)
   const segs = (path || "").split("/").filter(Boolean);
   let parent = "root";
@@ -100,19 +131,33 @@ async function scanGdrive(token: string, path: string) {
   }
   // list video files ในโฟลเดอร์
   const q = `'${parent}' in parents and mimeType contains 'video/' and trashed=false`;
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,size,videoMediaMetadata(durationMillis))&pageSize=200`,
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,size,thumbnailLink,videoMediaMetadata(durationMillis))&pageSize=200`,
     { headers: { Authorization: `Bearer ${token}` } });
   const j = await r.json();
-  return (j.files || []).map((f: any) => ({
-    title: f.name.replace(/\.[^.]+$/, ""),
-    file_path: f.id,                                              // gdrive ใช้ file ID
-    size_mb: f.size ? Math.round(Number(f.size) / 1048576) : 0,
-    duration: f.videoMediaMetadata?.durationMillis ? Math.round(Number(f.videoMediaMetadata.durationMillis) / 1000) : 0,
-  }));
+  const out = [];
+  for (const f of (j.files || [])) {
+    let cover = null;
+    if (f.thumbnailLink) {
+      // thumbnailLink ต้อง auth → ดึง bytes ด้วย token แล้วเก็บลง Storage
+      try {
+        const big = f.thumbnailLink.replace(/=s\d+$/, "=s640");
+        const tr = await fetch(big, { headers: { Authorization: `Bearer ${token}` } });
+        if (tr.ok) cover = await storeThumb(userId, f.id, new Uint8Array(await tr.arrayBuffer()));
+      } catch (_) { /* best effort */ }
+    }
+    out.push({
+      title: f.name.replace(/\.[^.]+$/, ""),
+      file_path: f.id,                                            // gdrive ใช้ file ID
+      size_mb: f.size ? Math.round(Number(f.size) / 1048576) : 0,
+      duration: f.videoMediaMetadata?.durationMillis ? Math.round(Number(f.videoMediaMetadata.durationMillis) / 1000) : 0,
+      cover,
+    });
+  }
+  return out;
 }
 
 // ---------- Dropbox ----------
-async function scanDropbox(token: string, path: string) {
+async function scanDropbox(token: string, path: string, userId: string) {
   const p = path === "/" ? "" : (path || "").replace(/\/$/, "");
   const r = await fetch("https://api.dropboxapi.com/2/files/list_folder", {
     method: "POST",
@@ -121,35 +166,59 @@ async function scanDropbox(token: string, path: string) {
   });
   const j = await r.json();
   if (j.error) throw new Error(`Dropbox: ${j.error_summary || JSON.stringify(j.error)}`);
-  return (j.entries || [])
-    .filter((e: any) => e[".tag"] === "file" && isVideoName(e.name))
-    .map((e: any) => ({
+  const files = (j.entries || []).filter((e: any) => e[".tag"] === "file" && isVideoName(e.name));
+  const out = [];
+  for (const e of files) {
+    let cover = null;
+    try {
+      const tr = await fetch("https://content.dropboxapi.com/2/files/get_thumbnail_v2", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Dropbox-API-Arg": JSON.stringify({ resource: { ".tag": "path", path: e.path_display }, format: "jpeg", size: "w640h480" }) },
+      });
+      if (tr.ok) cover = await storeThumb(userId, (e.id || e.path_lower).replace(/[^a-z0-9]/gi, ""), new Uint8Array(await tr.arrayBuffer()));
+    } catch (_) { /* best effort */ }
+    out.push({
       title: e.name.replace(/\.[^.]+$/, ""),
       file_path: e.path_display,                                  // dropbox ใช้ path
       size_mb: e.size ? Math.round(e.size / 1048576) : 0,
       duration: 0,
-    }));
+      cover,
+    });
+  }
+  return out;
 }
 
 // ---------- OneDrive ----------
-async function scanOnedrive(token: string, path: string) {
+async function scanOnedrive(token: string, path: string, userId: string) {
   const p = (path || "").replace(/\/$/, "");
   const endpoint = p
     ? `https://graph.microsoft.com/v1.0/me/drive/root:${encodeURI(p)}:/children`
     : `https://graph.microsoft.com/v1.0/me/drive/root/children`;
-  const r = await fetch(`${endpoint}?$top=200&$select=id,name,size,file,video`, {
+  const r = await fetch(`${endpoint}?$top=200&$select=id,name,size,file,video&$expand=thumbnails`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const j = await r.json();
   if (j.error) throw new Error(`OneDrive: ${j.error.message}`);
-  return (j.value || [])
-    .filter((e: any) => e.file && isVideoName(e.name))
-    .map((e: any) => ({
+  const files = (j.value || []).filter((e: any) => e.file && isVideoName(e.name));
+  const out = [];
+  for (const e of files) {
+    let cover = null;
+    const thumbUrl = e.thumbnails?.[0]?.large?.url || e.thumbnails?.[0]?.medium?.url;
+    if (thumbUrl) {
+      try {
+        const tr = await fetch(thumbUrl); // OneDrive thumbnail URL เป็น public ชั่วคราว
+        if (tr.ok) cover = await storeThumb(userId, e.id, new Uint8Array(await tr.arrayBuffer()));
+      } catch (_) { /* best effort */ }
+    }
+    out.push({
       title: e.name.replace(/\.[^.]+$/, ""),
       file_path: p ? `${p}/${e.name}` : `/${e.name}`,             // onedrive ใช้ path
       size_mb: e.size ? Math.round(e.size / 1048576) : 0,
       duration: e.video?.duration ? Math.round(e.video.duration / 1000) : 0,
-    }));
+      cover,
+    });
+  }
+  return out;
 }
 
 Deno.serve(async (req) => {
@@ -170,35 +239,49 @@ Deno.serve(async (req) => {
   if (!source) return json({ error: "ไม่พบ source" }, 404);
 
   try {
+    // ให้แน่ใจว่ามี bucket 'covers' (public) สำหรับเก็บ thumbnail
+    try { await admin.storage.createBucket("covers", { public: true }); } catch (_) { /* มีแล้ว */ }
+
     const token = await freshToken(source);
     let files: any[] = [];
-    if (source.type === "gdrive")        files = await scanGdrive(token, source.path);
-    else if (source.type === "dropbox")  files = await scanDropbox(token, source.path);
-    else if (source.type === "onedrive") files = await scanOnedrive(token, source.path);
-    else return json({ error: `source type ไม่รองรับ: ${source.type}` }, 400);
+    let quota = { used_gb: 0, total_gb: 0 };
+    if (source.type === "gdrive") {
+      files = await scanGdrive(token, source.path, user.id);
+      quota = await quotaGdrive(token);
+    } else if (source.type === "dropbox") {
+      files = await scanDropbox(token, source.path, user.id);
+      quota = await quotaDropbox(token);
+    } else if (source.type === "onedrive") {
+      files = await scanOnedrive(token, source.path, user.id);
+      quota = await quotaOnedrive(token);
+    } else return json({ error: `source type ไม่รองรับ: ${source.type}` }, 400);
+
+    // อัปเดต storage quota จริงลง source
+    await admin.from("sources").update({ used_gb: quota.used_gb, total_gb: quota.total_gb }).eq("id", sourceId);
 
     // upsert videos (ใช้ file_path เป็น key ป้องกันซ้ำ)
     let added = 0;
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
+      const cover = f.cover || COVERS[i % COVERS.length]; // ใช้ thumbnail จริง ถ้าไม่มีใช้ gradient
       const { data: existing } = await admin.from("videos")
         .select("id").eq("user_id", user.id).eq("source_id", sourceId).eq("file_path", f.file_path).maybeSingle();
       if (existing) {
         await admin.from("videos").update({
-          title: f.title, size_mb: f.size_mb, duration: f.duration, status: "ready",
+          title: f.title, size_mb: f.size_mb, duration: f.duration, cover, status: "ready",
         }).eq("id", existing.id);
       } else {
         await admin.from("videos").insert({
           user_id: user.id, source_id: sourceId,
           title: f.title, file_path: f.file_path,
           size_mb: f.size_mb, duration: f.duration,
-          cover: COVERS[i % COVERS.length], status: "ready",
+          cover, status: "ready",
         });
         added++;
       }
     }
 
-    return json({ added, total: files.length });
+    return json({ added, total: files.length, used_gb: quota.used_gb, total_gb: quota.total_gb });
   } catch (e) {
     console.error("scan error", e);
     return json({ error: String(e?.message || e) }, 500);

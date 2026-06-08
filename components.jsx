@@ -40,7 +40,33 @@ const ICONS = {
   settings: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM19.4 13.5a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3 1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8 1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z",
 };
 
+// โลโก้แบรนด์จริง (หลายสี) — Google Drive / Dropbox / OneDrive
+const BRAND_LOGOS = {
+  gdrive: (size, style) => (
+    <svg width={size} height={size} viewBox="0 0 87.3 78" style={{ flex: "none", ...style }}>
+      <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+      <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44c-.8 1.4-1.2 2.95-1.2 4.5h27.5z" fill="#00ac47"/>
+      <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+      <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+      <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+      <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+    </svg>
+  ),
+  dropbox: (size, style) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ flex: "none", ...style }}>
+      <path fill="#0061fe" d="M6 1.807 0 5.629l6 3.822 6.001-3.822zM18.001 1.807l-6 3.822 6 3.822L24 5.629zM0 13.274l6 3.822 6.001-3.822L6 9.452zM18.001 9.452l-6 3.822 6 3.822 5.999-3.822zM6 18.371l6.001 3.822 6-3.822-6-3.822z"/>
+    </svg>
+  ),
+  onedrive: (size, style) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ flex: "none", ...style }}>
+      <path fill="#0364b8" d="M10.6 9.2A5 5 0 0 1 20 11a3.8 3.8 0 0 1 .7 7.5H7.3A4.3 4.3 0 0 1 6 10a4.9 4.9 0 0 1 4.6-.8z"/>
+      <path fill="#0078d4" d="M7.3 18.5h10.3a3.8 3.8 0 0 0 2.2-6.9 4.9 4.9 0 0 0-9.2-1.4 4.3 4.3 0 0 0-3.3 8.3z" opacity=".5"/>
+    </svg>
+  ),
+};
+
 function Icon({ name, size = 19, stroke = 2, fill = false, style }) {
+  if (BRAND_LOGOS[name]) return BRAND_LOGOS[name](size, style);
   const d = ICONS[name] || "";
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? "currentColor" : "none"}

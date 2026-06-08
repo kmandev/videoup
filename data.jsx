@@ -13,9 +13,9 @@ const PLATFORM_LIST = ["tiktok", "youtube", "facebook", "shopee", "lazada"];
 
 /* video sources — not just Google Drive */
 const SOURCES = {
-  gdrive:   { id: "gdrive",   name: "Google Drive", short: "Drive",    color: "#1A73E8", icon: "drive",  account: "viralshop.media@gmail.com", path: "/VideoUp/clips",     used: 86, total: 200 },
-  dropbox:  { id: "dropbox",  name: "Dropbox",      short: "Dropbox",  color: "#0061FF", icon: "drive",  account: "viralshop@dropbox",         path: "/Videos/Shorts",     used: 12, total: 50  },
-  onedrive: { id: "onedrive", name: "OneDrive",     short: "OneDrive", color: "#0364B8", icon: "drive",  account: "viralshop@outlook.com",     path: "/Videos/VideoUp",    used: 24, total: 100 },
+  gdrive:   { id: "gdrive",   name: "Google Drive", short: "Drive",    color: "#1A73E8", icon: "gdrive",   account: "viralshop.media@gmail.com", path: "/VideoUp/clips",     used: 86, total: 200 },
+  dropbox:  { id: "dropbox",  name: "Dropbox",      short: "Dropbox",  color: "#0061FF", icon: "dropbox",  account: "viralshop@dropbox",         path: "/Videos/Shorts",     used: 12, total: 50  },
+  onedrive: { id: "onedrive", name: "OneDrive",     short: "OneDrive", color: "#0364B8", icon: "onedrive", account: "viralshop@outlook.com",     path: "/Videos/VideoUp",    used: 24, total: 100 },
   url:      { id: "url",      name: "URL / Direct",  short: "URL",      color: "#8A6E80", icon: "link",   account: "ลิงก์ตรงไปยังไฟล์",         path: "https://...",        used: 0,  total: 0   },
 };
 const SOURCE_LIST = ["gdrive", "dropbox", "onedrive", "url"];
