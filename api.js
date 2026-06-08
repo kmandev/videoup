@@ -32,7 +32,7 @@
         if (!window.sb) demo();
         return ok(await window.sb.auth.signInWithOAuth({
           provider: 'google',
-          options: { redirectTo: window.location.origin + '/index.html' },
+          options: { redirectTo: 'https://videoup-beta.vercel.app/index.html' },
         }));
       },
       async signOut() {

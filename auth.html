@@ -181,7 +181,7 @@ const { useState, useEffect, useRef } = React;
 
 /* --- check if already logged in --- */
 const existingUser = (() => { try { return JSON.parse(localStorage.getItem("videoup_user")); } catch { return null; } })();
-if (existingUser) { window.location.replace("index.html"); }
+if (existingUser) { window.location.replace("https://videoup-beta.vercel.app/index.html"); }
 
 /* --- get plan from URL param --- */
 const urlParams = new URLSearchParams(window.location.search);
@@ -262,10 +262,12 @@ function AuthApp() {
     return Object.keys(e).length === 0;
   };
 
+  const APP_URL = "https://videoup-beta.vercel.app";
+
   const doLogin = (userObj) => {
     localStorage.setItem("videoup_user", JSON.stringify(userObj));
     showToast("เข้าสู่ระบบสำเร็จ! กำลังพาไปยังแดชบอร์ด...", "ok");
-    setTimeout(() => { window.location.href = "index.html"; }, 1200);
+    setTimeout(() => { window.location.href = APP_URL + "/index.html"; }, 1200);
   };
 
   const handleSubmit = async (e) => {
