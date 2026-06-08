@@ -67,6 +67,31 @@
       return ok(await window.sb.from('sources').select('*').order('created_at'));
     },
 
+    // เริ่ม OAuth: เรียก Edge Function /start แล้วคืน authUrl ให้ redirect ไป
+    async startSourceOAuth(provider) {
+      if (!window.sb) demo();
+      const { data: { session } } = await window.sb.auth.getSession();
+      if (!session) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+      const res = await fetch(`${window.SUPABASE_URL}/functions/v1/oauth-source/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ provider, returnTo: window.location.origin + window.location.pathname }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'เริ่มเชื่อมต่อไม่สำเร็จ');
+      return j.authUrl;
+    },
+
+    async disconnectSource(id) {
+      if (!window.sb) demo();
+      ok(await window.sb.from('sources').delete().eq('id', id));
+    },
+
+    async updateSourcePath(id, path) {
+      if (!window.sb) demo();
+      return ok(await window.sb.from('sources').update({ path }).eq('id', id).select().single());
+    },
+
     /* ---------- PLATFORM CONNECTIONS ---------- */
     async listConnections() {
       if (!window.sb) demo();

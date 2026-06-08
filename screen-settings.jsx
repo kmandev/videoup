@@ -14,7 +14,7 @@ const SETTINGS_TABS = [
 const MOCK_NOTIF = { lineToken: "****XYZ1234", email: "viralshop@gmail.com", emailOn: true, lineOn: true, webhookOn: false, webhookUrl: "", notifyOnSuccess: true, notifyOnFail: true, notifyOnQueue: false };
 const MOCK_DEFAULTS = { tz: "Asia/Bangkok", cleanupDefault: "off", hashtagsTiktok: "#รีวิวของดี #ของมันต้องมี #ติ๊กต๊อกพาช้อป", hashtagsYoutube: "#Shorts #รีวิว", hashtagsFacebook: "#Reels #รีวิว #ช้อปออนไลน์", hashtagsShopee: "#ShopeeหาดของถูกบนShopee", hashtagsLazada: "#LazadaTH #ดีลเด็ด" };
 
-function Settings({ onToast }) {
+function Settings({ onToast, user }) {
   const [tab, setTab] = useState("profile");
   const [saved, setSaved] = useState({});
 
@@ -37,7 +37,7 @@ function Settings({ onToast }) {
 
       {/* right content */}
       <div>
-        {tab === "profile"       && <ProfileSection onSave={() => save("profile")} saved={saved.profile} />}
+        {tab === "profile"       && <ProfileSection onSave={() => save("profile")} saved={saved.profile} user={user} onToast={onToast} />}
         {tab === "platforms"     && <PlatformsSection onSave={() => save("platforms")} saved={saved.platforms} onToast={onToast} />}
         {tab === "sources"       && <SourcesSection onSave={() => save("sources")} saved={saved.sources} onToast={onToast} />}
         {tab === "notifications" && <NotifSection onSave={() => save("notifications")} saved={saved.notifications} />}
@@ -96,29 +96,58 @@ function Toggle2({ value, onChange, label, desc }) {
 /* ============================================================
    PROFILE
    ============================================================ */
-function ProfileSection({ onSave, saved }) {
-  const [name, setName] = useState("ViralShop TH");
-  const [email, setEmail] = useState("viralshop.media@gmail.com");
-  const [phone, setPhone] = useState("081-234-5678");
+function ProfileSection({ onSave, saved, user, onToast }) {
+  const [name, setName] = useState(user?.name || "");
+  const [email, setEmail] = useState(user?.email || "");
+  const [phone, setPhone] = useState(user?.phone || "");
+  const [busy, setBusy] = useState(false);
+
+  // sync เมื่อ user โหลดเสร็จ
+  useEffect(() => {
+    if (user) { setName(user.name || ""); setEmail(user.email || ""); }
+  }, [user]);
+
+  const avatarUrl = (user?.avatar && /^https?:\/\//.test(user.avatar)) ? user.avatar : null;
+  const initial = (user?.name || user?.email || "U").charAt(0).toUpperCase();
+  const provider = user?.provider || "email";
+
+  const saveProfile = async () => {
+    // live mode: บันทึกชื่อลง Supabase profiles
+    if (window.API && window.API.isLive()) {
+      setBusy(true);
+      try {
+        await window.sb.from("profiles").update({ name }).eq("id", (await window.API.auth.current()).id);
+        const cached = JSON.parse(localStorage.getItem("videoup_user") || "{}");
+        localStorage.setItem("videoup_user", JSON.stringify({ ...cached, name }));
+      } catch (e) { onToast && onToast({ kind: "scheduled", title: "บันทึกไม่สำเร็จ", desc: e.message }); }
+      setBusy(false);
+    }
+    onSave();
+  };
 
   return (
     <>
-      <SettingCard title="ข้อมูลโปรไฟล์" desc="ชื่อและอีเมลที่ใช้ในระบบ" onSave={onSave} saved={saved}>
+      <SettingCard title="ข้อมูลโปรไฟล์" desc="ชื่อและอีเมลที่ใช้ในระบบ" onSave={saveProfile} saved={saved}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 22 }}>
-          <div style={{ width: 68, height: 68, borderRadius: 20, background: "linear-gradient(135deg,var(--brand),var(--brand-2))", display: "grid", placeItems: "center", color: "#fff", fontWeight: 800, fontSize: 26, flex: "none" }}>V</div>
+          {avatarUrl
+            ? <img src={avatarUrl} alt="" referrerPolicy="no-referrer" style={{ width: 68, height: 68, borderRadius: 20, objectFit: "cover", flex: "none" }} />
+            : <div style={{ width: 68, height: 68, borderRadius: 20, background: "linear-gradient(135deg,var(--brand),var(--brand-2))", display: "grid", placeItems: "center", color: "#fff", fontWeight: 800, fontSize: 26, flex: "none" }}>{initial}</div>}
           <div>
-            <Btn size="sm" variant="ghost" icon="upload">เปลี่ยนรูป</Btn>
-            <div className="muted" style={{ fontSize: 11.5, fontWeight: 600, marginTop: 5 }}>PNG, JPG ไม่เกิน 2MB</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontWeight: 800, fontSize: 15 }}>{user?.name || "—"}</span>
+              {provider === "google" && <span className="badge mute" style={{ fontSize: 10.5 }}>เข้าผ่าน Google</span>}
+            </div>
+            <div className="muted" style={{ fontSize: 12, fontWeight: 600, marginTop: 3 }}>{user?.email || ""}</div>
           </div>
         </div>
         <FieldRow label="ชื่อร้าน / แบรนด์">
-          <input className="input" value={name} onChange={e => setName(e.target.value)} />
+          <input className="input" value={name} onChange={e => setName(e.target.value)} disabled={busy} />
         </FieldRow>
-        <FieldRow label="อีเมล" hint="ใช้สำหรับแจ้งเตือนและบิล">
-          <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+        <FieldRow label="อีเมล" hint={provider === "google" ? "อีเมลจาก Google เปลี่ยนไม่ได้" : "ใช้สำหรับแจ้งเตือนและบิล"}>
+          <input className="input" type="email" value={email} readOnly disabled style={{ opacity: .7 }} />
         </FieldRow>
         <FieldRow label="เบอร์โทรศัพท์" hint="ไม่บังคับ">
-          <input className="input" value={phone} onChange={e => setPhone(e.target.value)} />
+          <input className="input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="081-234-5678" />
         </FieldRow>
       </SettingCard>
 
@@ -186,14 +215,62 @@ function PlatformsSection({ onSave, saved, onToast }) {
    SOURCES
    ============================================================ */
 function SourcesSection({ onSave, saved, onToast }) {
-  const [connected, setConnected] = useState({ gdrive: true, dropbox: true, onedrive: true, url: false });
-  const [paths, setPaths] = useState({ gdrive: "/VideoUp/clips", dropbox: "/Videos/Shorts", onedrive: "/Videos/VideoUp" });
+  const live = window.API && window.API.isLive();
+  // demo: ใช้ mock; live: โหลดจาก Supabase
+  const [rows, setRows] = useState(live ? [] : [
+    { id: "gdrive", type: "gdrive", account: SOURCES.gdrive.account, path: "/VideoUp/clips", connected: true },
+    { id: "dropbox", type: "dropbox", account: SOURCES.dropbox.account, path: "/Videos/Shorts", connected: true },
+    { id: "onedrive", type: "onedrive", account: SOURCES.onedrive.account, path: "/Videos/VideoUp", connected: true },
+  ]);
+  const [paths, setPaths] = useState({});
+  const [busy, setBusy] = useState(null);
+
+  const load = async () => {
+    if (!live) return;
+    try {
+      const data = await window.API.listSources();
+      setRows(data);
+      const pp = {}; data.forEach(r => { pp[r.id] = r.path; });
+      setPaths(pp);
+    } catch (e) { onToast({ kind: "scheduled", title: "โหลด source ไม่สำเร็จ", desc: e.message }); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const byType = (t) => rows.find(r => r.type === t);
+
+  const connect = async (id) => {
+    if (!live) { // demo
+      setRows(r => [...r, { id, type: id, account: SOURCES[id].account, path: "", connected: true }]);
+      onToast({ kind: "publishing", title: "เชื่อมต่อแล้ว! (demo)", desc: SOURCES[id].name });
+      return;
+    }
+    setBusy(id);
+    try {
+      const authUrl = await window.API.startSourceOAuth(id);
+      window.location.href = authUrl; // redirect ไปหน้า consent ของผู้ให้บริการ
+    } catch (e) {
+      setBusy(null);
+      onToast({ kind: "scheduled", title: "เชื่อมต่อไม่สำเร็จ", desc: e.message });
+    }
+  };
+
+  const disconnect = async (row) => {
+    if (live) { try { await window.API.disconnectSource(row.id); } catch (e) {} }
+    setRows(r => r.filter(x => x.id !== row.id));
+    onToast({ kind: "scheduled", title: "ยกเลิก source", desc: SOURCES[row.type]?.name || row.type });
+  };
+
+  const savePath = async (row) => {
+    const path = paths[row.id] ?? row.path;
+    if (live) { try { await window.API.updateSourcePath(row.id, path); } catch (e) {} }
+    onToast({ kind: "scheduled", title: "บันทึก path แล้ว", desc: `${SOURCES[row.type]?.name}: ${path}` });
+  };
 
   return (
     <SettingCard title="แหล่งวิดีโอ (Sources)" desc="เชื่อมต่อ Cloud Storage ที่ต้องการ">
       <div className="grid" style={{ gap: 12 }}>
         {SOURCE_LIST.filter(id => id !== "url").map(id => {
-          const s = SOURCES[id], on = connected[id];
+          const s = SOURCES[id], row = byType(id), on = !!row;
           return (
             <div key={id} style={{ border: `1.5px solid ${on ? `color-mix(in oklab,${s.color} 30%,var(--border))` : "var(--border)"}`, borderRadius: 14, overflow: "hidden", transition: ".15s" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 13, padding: "13px 15px", background: on ? `color-mix(in oklab,${s.color} 5%,var(--surface))` : "var(--surface)" }}>
@@ -202,22 +279,24 @@ function SourcesSection({ onSave, saved, onToast }) {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 800, fontSize: 14.5 }}>{s.name}</div>
-                  <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>{on ? s.account : "ยังไม่ได้เชื่อมต่อ"}</div>
+                  <div className="muted" style={{ fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{on ? (row.account || s.account) : "ยังไม่ได้เชื่อมต่อ"}</div>
                 </div>
                 {on
                   ? <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <span className="badge ok"><span className="dot" />เชื่อมแล้ว</span>
-                      <Btn size="sm" variant="ghost" icon="x" onClick={() => { setConnected(c => ({ ...c, [id]: false })); onToast({ kind: "scheduled", title: "ยกเลิก source", desc: s.name }); }}>ยกเลิก</Btn>
+                      <Btn size="sm" variant="ghost" icon="x" onClick={() => disconnect(row)}>ยกเลิก</Btn>
                     </div>
-                  : <Btn size="sm" variant="primary" icon="link" onClick={() => { setConnected(c => ({ ...c, [id]: true })); onToast({ kind: "publishing", title: "เชื่อมต่อแล้ว!", desc: s.name }); }}>เชื่อมต่อ</Btn>}
+                  : <Btn size="sm" variant="primary" icon="link" disabled={busy === id} onClick={() => connect(id)}>
+                      {busy === id ? "กำลังเปิด..." : "เชื่อมต่อ"}
+                    </Btn>}
               </div>
               {on && (
                 <div style={{ borderTop: `1px solid color-mix(in oklab,${s.color} 15%,var(--border))`, padding: "10px 15px", background: "var(--surface-2)", display: "flex", alignItems: "center", gap: 10 }}>
                   <Icon name="film" size={14} style={{ color: "var(--text-mute)", flex: "none" }} />
-                  <input className="input" value={paths[id] || ""} style={{ fontSize: 12.5, fontFamily: "var(--font-mono)", padding: "7px 10px", flex: 1 }}
-                    onChange={e => setPaths(p => ({ ...p, [id]: e.target.value }))}
+                  <input className="input" value={paths[row.id] ?? row.path ?? ""} style={{ fontSize: 12.5, fontFamily: "var(--font-mono)", padding: "7px 10px", flex: 1 }}
+                    onChange={e => setPaths(p => ({ ...p, [row.id]: e.target.value }))}
                     placeholder="/path/to/videos" />
-                  <Btn size="sm" variant="ghost" onClick={() => onToast({ kind: "scheduled", title: "บันทึก path แล้ว", desc: `${s.name}: ${paths[id]}` })}>บันทึก</Btn>
+                  <Btn size="sm" variant="ghost" onClick={() => savePath(row)}>บันทึก</Btn>
                 </div>
               )}
             </div>

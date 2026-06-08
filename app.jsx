@@ -44,19 +44,48 @@ function App() {
   const [upgradeTo, setUpgradeTo] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  // load user from localStorage
-  const user = (() => { try { return JSON.parse(localStorage.getItem("videoup_user")); } catch { return null; } })() || { name: "ViralShop TH", email: "viralshop@gmail.com", avatar: "V" };
+  // load user — ดึง profile จริงจาก Supabase ใน live mode, fallback mock ใน demo
+  const mockUser = (() => { try { return JSON.parse(localStorage.getItem("videoup_user")); } catch { return null; } })() || { name: "ViralShop TH", email: "viralshop@gmail.com", avatar: "V" };
+  const [user, setUser] = useState(mockUser);
 
-  const logout = () => {
+  useEffect(() => {
+    if (!window.API || !window.API.isLive()) return;
+    (async () => {
+      try {
+        const authUser = await window.API.auth.current();
+        if (!authUser) return;
+        let profile = null;
+        try { profile = await window.API.getProfile(); } catch (e) { /* profile row อาจยังไม่ถูกสร้าง */ }
+        const meta = authUser.user_metadata || {};
+        const u = {
+          name:     profile?.name || meta.full_name || meta.name || authUser.email.split("@")[0],
+          email:    authUser.email,
+          avatar:   profile?.avatar || meta.avatar_url || meta.picture || null,
+          plan:     profile?.plan || meta.plan || "free",
+          provider: authUser.app_metadata?.provider || "email",
+        };
+        setUser(u);
+        if (u.plan) setPlan(u.plan);
+        localStorage.setItem("videoup_user", JSON.stringify(u));
+      } catch (e) { console.warn("[VideoUp] โหลดโปรไฟล์ไม่สำเร็จ:", e.message); }
+    })();
+  }, []);
+
+  const logout = async () => {
+    try { if (window.API) await window.API.auth.signOut(); } catch (e) {}
     localStorage.removeItem("videoup_user");
     window.location.href = "auth.html";
   };
 
-  const userInitial = (user.avatar && user.avatar.length > 1) ? user.avatar : (user.name || user.email || "U").charAt(0).toUpperCase();
+  const avatarUrl = (user.avatar && /^https?:\/\//.test(user.avatar)) ? user.avatar : null;
+  const userInitial = (!avatarUrl && user.avatar && user.avatar.length > 1) ? user.avatar : (user.name || user.email || "U").charAt(0).toUpperCase();
   const UserAvatar = ({ size = 36 }) => (
-    <div style={{ width: size, height: size, borderRadius: "50%", background: "linear-gradient(135deg,var(--brand),var(--brand-2))", color: "#fff", fontWeight: 800, fontSize: size * 0.4, display: "grid", placeItems: "center", flex: "none", cursor: "pointer", userSelect: "none" }}>
-      {userInitial}
-    </div>
+    avatarUrl
+      ? <img src={avatarUrl} alt="" referrerPolicy="no-referrer"
+          style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flex: "none", cursor: "pointer", userSelect: "none" }} />
+      : <div style={{ width: size, height: size, borderRadius: "50%", background: "linear-gradient(135deg,var(--brand),var(--brand-2))", color: "#fff", fontWeight: 800, fontSize: size * 0.4, display: "grid", placeItems: "center", flex: "none", cursor: "pointer", userSelect: "none" }}>
+          {userInitial}
+        </div>
   );
 
   // apply theme + accent + radius
@@ -76,6 +105,23 @@ function App() {
     setToasts(ts => [...ts, { id, ...toast }]);
     setTimeout(() => setToasts(ts => ts.filter(x => x.id !== id)), 4200);
   };
+
+  // แจ้งผล OAuth source หลัง redirect กลับ (?source=connected|error|...)
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const s = p.get("source");
+    if (!s) return;
+    const map = {
+      connected:    { kind: "publishing", title: "เชื่อมต่อ source สำเร็จ! ✓", desc: "พร้อมเลือกคลิปมาโพสต์ได้แล้ว" },
+      expired:      { kind: "scheduled",  title: "ลิงก์หมดอายุ", desc: "กรุณาลองเชื่อมต่อใหม่อีกครั้ง" },
+      token_failed: { kind: "scheduled",  title: "แลก token ไม่สำเร็จ", desc: "ตรวจสอบ client ID/secret ใน Supabase" },
+      error:        { kind: "scheduled",  title: "เชื่อมต่อไม่สำเร็จ", desc: "เกิดข้อผิดพลาดระหว่าง OAuth" },
+    };
+    pushToast(map[s] || map.error);
+    if (s === "connected") setRoute("settings");
+    // ล้าง query ออกจาก URL
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
 
   const go = (r) => { setRoute(r); setMenuOpen(false); window.scrollTo({ top: 0 }); };
   const openCreate = (date) => { setCreateSeed({ date: date instanceof Date ? date : null, vid: null }); go("create"); };
@@ -110,7 +156,7 @@ function App() {
   if (route === "dashboard") screen = <Dashboard go={go} openCreate={() => openCreate()} openPost={openPost} />;
   else if (route === "calendar") screen = <Calendar openCreate={openCreate} openPost={openPost} />;
   else if (route === "billing")  screen = <Billing currentPlan={plan} onChangePlan={requestPlan} onToast={pushToast} />;
-  else if (route === "settings") screen = <Settings onToast={pushToast} />;
+  else if (route === "settings") screen = <Settings onToast={pushToast} user={user} />;
   else screen = <CreatePost initialVid={createSeed.vid} initialDate={createSeed.date}
                    onPublish={handlePublish} onCancel={() => go("dashboard")} />;
 
