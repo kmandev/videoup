@@ -16,10 +16,13 @@ const LINK_PH = {
   lazada:   "https://s.lazada.co.th/s.xxxx",
 };
 
-function CreatePost({ initialVid, initialDate, onPublish, onCancel }) {
+function CreatePost({ initialVid, initialDate, videos: propVideos, onPublish, onCancel }) {
+  // ใช้ videos จริงจาก Supabase ถ้ามี (live mode) ไม่งั้น fallback mock
+  const allVideos = (propVideos && propVideos.length >= 0) ? propVideos : VIDEOS;
+  const findVid = (id) => allVideos.find(v => v.id === id) || VID(id);
   const [vid, setVid] = useState(initialVid || null);
   // source filter for the library (defaults to the selected video's source, or gdrive)
-  const [activeSource, setActiveSource] = useState(() => (initialVid && VID(initialVid)?.source) || "gdrive");
+  const [activeSource, setActiveSource] = useState(() => (initialVid && findVid(initialVid)?.source) || "gdrive");
   const [plats, setPlats] = useState({ tiktok: true, facebook: true, shopee: false, youtube: false, lazada: false });
   const [content, setContent] = useState(() => {
     const c = {};
@@ -54,10 +57,10 @@ function CreatePost({ initialVid, initialDate, onPublish, onCancel }) {
     });
   };
 
-  const v = vid ? VID(vid) : null;
+  const v = vid ? findVid(vid) : null;
   const cur = content[tab] || CONTENT_TPL[tab];
   const canPublish = vid && selectedPlats.length > 0;
-  const filtered = VIDEOS.filter(x => x.source === activeSource);
+  const filtered = allVideos.filter(x => x.source === activeSource);
   const src = SRC(activeSource);
 
   const doPublish = () => {

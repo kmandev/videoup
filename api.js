@@ -99,6 +99,21 @@
     },
 
     /* ---------- VIDEOS ---------- */
+    // สแกนไฟล์วิดีโอจาก cloud source → บันทึกลงตาราง videos (เรียก Edge Function)
+    async scanSource(sourceId) {
+      if (!window.sb) demo();
+      const { data: { session } } = await window.sb.auth.getSession();
+      if (!session) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+      const res = await fetch(`${window.SUPABASE_URL}/functions/v1/scan-source`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ sourceId }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'สแกนไฟล์ไม่สำเร็จ');
+      return j; // { added, total }
+    },
+
     async listVideos(sourceId) {
       if (!window.sb) demo();
       let q = window.sb.from('videos').select('*').eq('status', 'ready').order('created_at', { ascending: false });

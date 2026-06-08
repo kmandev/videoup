@@ -83,15 +83,22 @@ function App() {
         setLivePosts(data || []);
       } catch (e) { console.warn("[VideoUp] โหลด posts ไม่สำเร็จ:", e.message); setLivePosts([]); }
 
-      // โหลด videos จริงจาก Supabase (ถ้ามี source เชื่อมต่อแล้ว)
+      // โหลด videos จริงจาก Supabase (ทุก source ที่เชื่อมต่อแล้ว)
       try {
         const sources = await window.API.listSources();
-        if (sources && sources.length > 0) {
-          const vids = await window.API.listVideos(sources[0].id);
-          setLiveVideos(vids || []);
-        } else {
-          setLiveVideos([]);
-        }
+        const byId = {}; (sources || []).forEach(s => { byId[s.id] = s.type; });
+        const vids = await window.API.listVideos(); // ดึงทั้งหมดของ user
+        // normalize ให้ตรงรูปแบบที่ screen ใช้ (source=type, dur, size)
+        const norm = (vids || []).map(v => ({
+          id: v.id,
+          title: v.title,
+          dur: v.duration || 0,
+          size: v.size_mb || 0,
+          cover: v.cover || "linear-gradient(135deg,#6C4DFF,#2D7BFF)",
+          source: byId[v.source_id] || "gdrive",
+          file_path: v.file_path,
+        }));
+        setLiveVideos(norm);
       } catch (e) { console.warn("[VideoUp] โหลด videos ไม่สำเร็จ:", e.message); setLiveVideos([]); }
     })();
   }, []);
@@ -183,7 +190,7 @@ function App() {
   else if (route === "billing")  screen = <Billing currentPlan={plan} onChangePlan={requestPlan} onToast={pushToast} />;
   else if (route === "settings") screen = <Settings onToast={pushToast} user={user} />;
   else screen = <CreatePost initialVid={createSeed.vid} initialDate={createSeed.date}
-                   onPublish={handlePublish} onCancel={() => go("dashboard")} />;
+                   videos={videos} onPublish={handlePublish} onCancel={() => go("dashboard")} />;
 
   const cur = [...NAV, ...BIZ_NAV].find(n => n.id === route) || NAV[0];
 

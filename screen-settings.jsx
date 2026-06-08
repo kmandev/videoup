@@ -224,6 +224,7 @@ function SourcesSection({ onSave, saved, onToast }) {
   ]);
   const [paths, setPaths] = useState({});
   const [busy, setBusy] = useState(null);
+  const [syncing, setSyncing] = useState(null);
 
   const load = async () => {
     if (!live) return;
@@ -266,6 +267,27 @@ function SourcesSection({ onSave, saved, onToast }) {
     onToast({ kind: "scheduled", title: "บันทึก path แล้ว", desc: `${SOURCES[row.type]?.name}: ${path}` });
   };
 
+  // สแกนไฟล์วิดีโอจาก source → บันทึกลง DB
+  const sync = async (row) => {
+    if (!live) {
+      onToast({ kind: "publishing", title: "Sync แล้ว! (demo)", desc: SOURCES[row.type]?.name });
+      return;
+    }
+    // บันทึก path ล่าสุดก่อนสแกน
+    const path = paths[row.id] ?? row.path;
+    if (path && path !== row.path) { try { await window.API.updateSourcePath(row.id, path); } catch (e) {} }
+    setSyncing(row.id);
+    try {
+      const r = await window.API.scanSource(row.id);
+      onToast({ kind: "publishing", title: "Sync วิดีโอสำเร็จ ✓",
+        desc: `พบ ${r.total} คลิป · เพิ่มใหม่ ${r.added} คลิป` });
+    } catch (e) {
+      onToast({ kind: "scheduled", title: "Sync ไม่สำเร็จ", desc: e.message });
+    } finally {
+      setSyncing(null);
+    }
+  };
+
   return (
     <SettingCard title="แหล่งวิดีโอ (Sources)" desc="เชื่อมต่อ Cloud Storage ที่ต้องการ">
       <div className="grid" style={{ gap: 12 }}>
@@ -297,6 +319,9 @@ function SourcesSection({ onSave, saved, onToast }) {
                     onChange={e => setPaths(p => ({ ...p, [row.id]: e.target.value }))}
                     placeholder="/path/to/videos" />
                   <Btn size="sm" variant="ghost" onClick={() => savePath(row)}>บันทึก</Btn>
+                  <Btn size="sm" variant="primary" icon="upload" disabled={syncing === row.id} onClick={() => sync(row)}>
+                    {syncing === row.id ? "กำลัง Sync..." : "Sync วิดีโอ"}
+                  </Btn>
                 </div>
               )}
             </div>
