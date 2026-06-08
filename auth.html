@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VideoUp — เข้าสู่ระบบ / สมัครสมาชิก</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { min-height: 100vh; display: flex; }
+
+  .auth-wrap {
+    display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; width: 100%;
+  }
+
+  /* LEFT — brand panel */
+  .auth-left {
+    background: linear-gradient(150deg, var(--brand) 0%, var(--brand-2) 100%);
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 44px 48px; position: relative; overflow: hidden;
+  }
+  .auth-left::before {
+    content: ""; position: absolute; top: -100px; right: -120px;
+    width: 440px; height: 440px; border-radius: 50%;
+    background: rgba(255,255,255,.1); pointer-events: none;
+  }
+  .auth-left::after {
+    content: ""; position: absolute; bottom: -80px; left: -80px;
+    width: 320px; height: 320px; border-radius: 50%;
+    background: rgba(255,255,255,.07); pointer-events: none;
+  }
+  .auth-brand { display: flex; align-items: center; gap: 12px; position: relative; z-index: 1; }
+  .auth-brand .mark {
+    width: 42px; height: 42px; border-radius: 13px;
+    background: rgba(255,255,255,.22); display: grid; place-items: center; color: #fff;
+    backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,.3);
+  }
+  .auth-brand .name { font-weight: 800; font-size: 22px; color: #fff; letter-spacing: -.02em; }
+
+  .auth-hero { position: relative; z-index: 1; }
+  .auth-hero h2 { font-size: 34px; font-weight: 800; color: #fff; line-height: 1.18; letter-spacing: -.025em; margin: 0 0 14px; }
+  .auth-hero p { font-size: 16px; color: rgba(255,255,255,.85); line-height: 1.6; margin: 0 0 28px; }
+
+  .auth-feats { display: flex; flex-direction: column; gap: 14px; position: relative; z-index: 1; }
+  .auth-feat { display: flex; align-items: center; gap: 13px; }
+  .auth-feat .afi { width: 36px; height: 36px; border-radius: 10px; background: rgba(255,255,255,.15); display: grid; place-items: center; color: #fff; flex: none; }
+  .auth-feat .afd { font-size: 14px; color: rgba(255,255,255,.9); font-weight: 600; }
+
+  .auth-social-proof { display: flex; align-items: center; gap: 12px; position: relative; z-index: 1; }
+  .auth-av { display: flex; }
+  .auth-av span { width: 28px; height: 28px; border-radius: 99px; margin-left: -8px; border: 2px solid rgba(255,255,255,.5); }
+  .auth-sp-txt { font-size: 13px; color: rgba(255,255,255,.85); font-weight: 600; }
+
+  /* RIGHT — form panel */
+  .auth-right {
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 44px 56px; background: var(--surface); overflow-y: auto;
+  }
+  .auth-form-wrap { max-width: 400px; width: 100%; margin: 0 auto; }
+
+  .auth-tabs { display: flex; background: var(--surface-2); border-radius: 13px; padding: 4px; gap: 3px; margin-bottom: 28px; }
+  .auth-tab {
+    flex: 1; border: none; background: none; font-weight: 700; font-size: 14.5px;
+    padding: 10px; border-radius: 10px; color: var(--text-dim); cursor: pointer; font-family: inherit; transition: .15s;
+  }
+  .auth-tab.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+  .auth-head { margin-bottom: 26px; }
+  .auth-head h1 { font-size: 26px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 5px; }
+  .auth-head p { font-size: 14px; color: var(--text-dim); margin: 0; font-weight: 600; }
+
+  /* Google / OAuth btn */
+  .btn-google {
+    display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%;
+    padding: 12px 16px; border: 1.5px solid var(--border-2); border-radius: 13px;
+    background: var(--surface); font-weight: 700; font-size: 15px; color: var(--text);
+    cursor: pointer; font-family: inherit; transition: border-color .14s, background .14s;
+  }
+  .btn-google:hover { border-color: var(--text-mute); background: var(--surface-2); }
+  .btn-google svg { flex: none; }
+
+  .auth-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
+  .auth-divider span { font-size: 12.5px; font-weight: 700; color: var(--text-mute); white-space: nowrap; }
+  .auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+  .auth-field { margin-bottom: 15px; }
+  .auth-field label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 7px; }
+  .auth-input {
+    width: 100%; border: 1.5px solid var(--border-2); border-radius: 11px; padding: 12px 14px;
+    font-size: 14.5px; background: var(--surface); color: var(--text);
+    transition: border-color .14s, box-shadow .14s; font-family: inherit; box-sizing: border-box;
+  }
+  .auth-input:focus { outline: none; border-color: var(--brand); box-shadow: var(--ring); }
+  .auth-input::placeholder { color: var(--text-mute); }
+
+  .pw-wrap { position: relative; }
+  .pw-wrap .auth-input { padding-right: 44px; }
+  .pw-eye {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: var(--text-mute); cursor: pointer; padding: 4px; display: grid; place-items: center;
+  }
+
+  .auth-plan-pick { margin-bottom: 18px; }
+  .auth-plan-pick label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .plan-pills { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .plan-pill {
+    border: 1.5px solid var(--border-2); border-radius: 12px; padding: 12px 8px; text-align: center;
+    cursor: pointer; transition: .14s; position: relative; background: var(--surface);
+  }
+  .plan-pill.on { border-color: var(--brand); background: var(--brand-soft); }
+  .plan-pill .ppn { font-weight: 800; font-size: 15px; }
+  .plan-pill .ppn.pop { color: var(--brand); }
+  .plan-pill .ppp { font-size: 11.5px; color: var(--text-dim); font-weight: 600; margin-top: 2px; }
+  .plan-pill .pptag {
+    position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+    background: var(--brand); color: #fff; font-size: 9.5px; font-weight: 800;
+    padding: 2px 8px; border-radius: 99px; white-space: nowrap;
+  }
+
+  .btn-auth {
+    width: 100%; padding: 14px; border-radius: 13px; font-weight: 800; font-size: 16px;
+    border: none; background: linear-gradient(135deg, var(--brand), color-mix(in oklab, var(--brand) 70%, var(--brand-2)));
+    color: #fff; cursor: pointer; font-family: inherit; margin-top: 6px;
+    box-shadow: 0 8px 22px -10px color-mix(in oklab, var(--brand) 65%, transparent);
+    transition: transform .08s, box-shadow .15s;
+  }
+  .btn-auth:hover { box-shadow: 0 12px 28px -10px color-mix(in oklab, var(--brand) 70%, transparent); }
+  .btn-auth:active { transform: translateY(1px) scale(.99); }
+  .btn-auth:disabled { opacity: .6; cursor: not-allowed; }
+
+  .auth-footer { margin-top: 20px; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-dim); }
+  .auth-footer a { color: var(--brand); text-decoration: none; font-weight: 700; }
+  .auth-footer a:hover { text-decoration: underline; }
+
+  .auth-terms { margin-top: 14px; text-align: center; font-size: 11.5px; color: var(--text-mute); line-height: 1.6; }
+  .auth-terms a { color: var(--text-dim); }
+
+  .check-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; cursor: pointer; }
+  .check-row input { width: 17px; height: 17px; accent-color: var(--brand); cursor: pointer; }
+  .check-row span { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+
+  /* loading state */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 20px; height: 20px; border: 2.5px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; }
+
+  /* toast */
+  .auth-toast {
+    position: fixed; bottom: 22px; right: 22px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px;
+    box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 12px;
+    min-width: 280px; animation: toastIn .3s cubic-bezier(.2,.9,.3,1.2); z-index: 200;
+  }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
+
+  @media (max-width: 780px) {
+    .auth-wrap { grid-template-columns: 1fr; }
+    .auth-left { display: none; }
+    .auth-right { padding: 32px 24px; justify-content: flex-start; padding-top: 48px; }
+    .auth-form-wrap { max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- Supabase backend -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="supabase-client.js"></script>
+<script src="api.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+/* --- check if already logged in --- */
+const existingUser = (() => { try { return JSON.parse(localStorage.getItem("videoup_user")); } catch { return null; } })();
+if (existingUser) { window.location.replace("index.html"); }
+
+/* --- get plan from URL param --- */
+const urlParams = new URLSearchParams(window.location.search);
+const preselectedPlan = urlParams.get("plan") || "pro";
+
+/* --- icon --- */
+function Icon({ name, size = 19, style }) {
+  const ICONS = {
+    rocket: "M5 14c-1.5 1.5-2 5-2 5s3.5-.5 5-2M14 4c3 0 6 3 6 6 0 2.5-2 6-6 9-4-3-6-6.5-6-9 0-3 3-6 6-6Z",
+    send: "M22 2 11 13M22 2 15 22l-4-9-9-4 20-7Z",
+    calendar: "M7 3v3M17 3v3M3.5 9h17M5 5h14a1.5 1.5 0 0 1 1.5 1.5V19A1.5 1.5 0 0 1 19 20.5H5A1.5 1.5 0 0 1 3.5 19V6.5A1.5 1.5 0 0 1 5 5Z",
+    link: "M9 15l6-6M10.5 6.5l1.8-1.8a3.5 3.5 0 0 1 5 5l-1.8 1.8M13.5 17.5l-1.8 1.8a3.5 3.5 0 0 1-5-5l1.8-1.8",
+    check: "M4 12.5l5 5L20 6.5",
+    eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z",
+    eyeoff: "M17.9 17.9A10 10 0 0 1 12 19c-7 0-10-7-10-7a17.8 17.8 0 0 1 5.1-6.4M9.9 4.2A9.8 9.8 0 0 1 12 4c7 0 10 7 10 7a17.8 17.8 0 0 1-2.4 3.5M3 3l18 18",
+    trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
+    grid: "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
+  };
+  const d = ICONS[name] || "";
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      style={{ flex: "none", ...style }}>
+      {d.split("M").filter(Boolean).map((seg, i) => <path key={i} d={"M" + seg} />)}
+    </svg>
+  );
+}
+
+const PLANS_DATA = [
+  { id: "free",     label: "Free",     price: "ฟรี",      popular: false },
+  { id: "pro",      label: "Pro",      price: "฿349/เดือน", popular: true  },
+  { id: "business", label: "Business", price: "฿990/เดือน", popular: false },
+];
+
+const AUTH_FEATS = [
+  { icon: "send",     text: "โพสต์ทีเดียว 5 แพลตฟอร์ม" },
+  { icon: "link",     text: "Affiliate link อัตโนมัติ" },
+  { icon: "calendar", text: "ตั้งเวลาล่วงหน้าได้ไม่จำกัด" },
+  { icon: "grid",     text: "Dashboard รวมทุกแพลตฟอร์ม" },
+];
+
+const GRAD_COVERS = [
+  "linear-gradient(135deg,#FF6A3D,#FF2E76)",
+  "linear-gradient(135deg,#6C4DFF,#2D7BFF)",
+  "linear-gradient(135deg,#FF2E97,#FFC233)",
+  "linear-gradient(135deg,#14CFA6,#2D7BFF)",
+];
+
+function AuthApp() {
+  const [mode, setMode]       = useState(urlParams.get("mode") === "signup" ? "signup" : "login");
+  const [email, setEmail]     = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName]       = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [plan, setPlan]       = useState(preselectedPlan);
+  const [showPw, setShowPw]   = useState(false);
+  const [agree, setAgree]     = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [gLoading, setGLoading] = useState(false);
+  const [toast, setToast]     = useState(null);
+  const [errors, setErrors]   = useState({});
+
+  const showToast = (msg, kind = "ok") => {
+    setToast({ msg, kind });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const validate = () => {
+    const e = {};
+    if (!email.includes("@")) e.email = "กรุณาใส่อีเมลที่ถูกต้อง";
+    if (password.length < 6) e.password = "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร";
+    if (mode === "signup") {
+      if (!name.trim()) e.name = "กรุณาใส่ชื่อ";
+      if (confirm !== password) e.confirm = "รหัสผ่านไม่ตรงกัน";
+      if (!agree) e.agree = "กรุณายอมรับเงื่อนไข";
+    }
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const doLogin = (userObj) => {
+    localStorage.setItem("videoup_user", JSON.stringify(userObj));
+    showToast("เข้าสู่ระบบสำเร็จ! กำลังพาไปยังแดชบอร์ด...", "ok");
+    setTimeout(() => { window.location.href = "index.html"; }, 1200);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+    setLoading(true);
+
+    // ---- LIVE: ใช้ Supabase Auth จริง ----
+    if (window.API && window.API.isLive()) {
+      try {
+        if (mode === "signup") {
+          await window.API.auth.signUp({ email, password, name, plan });
+          // ถ้าเปิด email confirmation จะยังไม่มี session
+          const u = await window.API.auth.current();
+          if (!u) {
+            setLoading(false);
+            showToast("ส่งลิงก์ยืนยันไปที่อีเมลแล้ว กรุณายืนยันก่อนเข้าสู่ระบบ", "ok");
+            return;
+          }
+        } else {
+          await window.API.auth.signIn({ email, password });
+        }
+        setLoading(false);
+        // Supabase persist session เอง — เก็บ mirror ไว้ให้ guard เดิมทำงาน
+        doLogin({ name: mode === "signup" ? name : email.split("@")[0], email,
+                  plan: mode === "signup" ? plan : "free", provider: "email" });
+      } catch (err) {
+        setLoading(false);
+        setErrors({ email: err.message || "เข้าสู่ระบบไม่สำเร็จ" });
+      }
+      return;
+    }
+
+    // ---- DEMO MODE: mock ----
+    setTimeout(() => {
+      setLoading(false);
+      doLogin({
+        name: mode === "signup" ? name : email.split("@")[0],
+        email, plan: mode === "signup" ? plan : "pro",
+        avatar: null, provider: "email",
+      });
+    }, 1400);
+  };
+
+  const handleGoogle = async () => {
+    setGLoading(true);
+
+    // ---- LIVE: OAuth redirect ----
+    if (window.API && window.API.isLive()) {
+      try {
+        await window.API.auth.signInWithGoogle(); // redirect ออกไป
+      } catch (err) {
+        setGLoading(false);
+        showToast(err.message || "เชื่อม Google ไม่สำเร็จ", "err");
+      }
+      return;
+    }
+
+    // ---- DEMO MODE ----
+    setTimeout(() => {
+      setGLoading(false);
+      doLogin({
+        name: "ViralShop TH", email: "viralshop.media@gmail.com",
+        plan: mode === "signup" ? plan : "pro",
+        avatar: "VS", provider: "google",
+      });
+    }, 1600);
+  };
+
+  const switchMode = (m) => {
+    setMode(m); setErrors({});
+    setEmail(""); setPassword(""); setName(""); setConfirm(""); setAgree(false);
+  };
+
+  const isSignup = mode === "signup";
+
+  return (
+    <div className="auth-wrap">
+      {/* LEFT — brand panel */}
+      <div className="auth-left">
+        <div className="auth-brand">
+          <div className="mark"><Icon name="rocket" size={22} /></div>
+          <span className="name">VideoUp</span>
+        </div>
+
+        <div className="auth-hero">
+          <h2>ปล่อยคลิปขาย<br />ทุกแพลตฟอร์ม<br />ในคลิกเดียว</h2>
+          <p>จัดการ TikTok, YouTube Shorts, Facebook Reels, Shopee และ Lazada ในที่เดียว</p>
+          <div className="auth-feats">
+            {AUTH_FEATS.map((f, i) => (
+              <div key={i} className="auth-feat">
+                <div className="afi"><Icon name={f.icon} size={18} /></div>
+                <div className="afd">{f.text}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="auth-social-proof">
+          <div className="auth-av">
+            {GRAD_COVERS.map((c, i) => (
+              <span key={i} style={{ background: c }} />
+            ))}
+          </div>
+          <span className="auth-sp-txt">นักขาย <b style={{ color: "#fff" }}>2,400+</b> คนใช้งานอยู่</span>
+        </div>
+      </div>
+
+      {/* RIGHT — form */}
+      <div className="auth-right">
+        <div className="auth-form-wrap">
+          {/* tabs */}
+          <div className="auth-tabs">
+            <button className={`auth-tab ${!isSignup ? "on" : ""}`} onClick={() => switchMode("login")}>เข้าสู่ระบบ</button>
+            <button className={`auth-tab ${isSignup ? "on" : ""}`} onClick={() => switchMode("signup")}>สมัครสมาชิก</button>
+          </div>
+
+          <div className="auth-head">
+            <h1>{isSignup ? "สร้างบัญชี VideoUp" : "ยินดีต้อนรับกลับ"}</h1>
+            <p>{isSignup ? "เริ่มโพสต์คลิปขายหลายแพลตฟอร์มได้เลย" : "เข้าสู่ระบบเพื่อจัดการโพสต์และตั้งเวลา"}</p>
+          </div>
+
+          {/* Gmail button */}
+          <button className="btn-google" onClick={handleGoogle} disabled={gLoading}>
+            {gLoading
+              ? <span className="spinner" style={{ borderColor: "rgba(0,0,0,.2)", borderTopColor: "var(--brand)" }} />
+              : <svg width="20" height="20" viewBox="0 0 48 48">
+                  <path fill="#FFC107" d="M43.6 20H24v8h11.3C33.6 32.9 29.3 36 24 36a12 12 0 1 1 0-24c3.1 0 5.8 1.1 7.9 3l5.7-5.7A19.9 19.9 0 0 0 24 4 20 20 0 1 0 44 24c0-1.4-.1-2.7-.4-4Z"/>
+                  <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8A12 12 0 0 1 24 12c3.1 0 5.8 1.1 7.9 3l5.7-5.7A19.9 19.9 0 0 0 24 4 20 20 0 0 0 6.3 14.7Z"/>
+                  <path fill="#4CAF50" d="M24 44a19.9 19.9 0 0 0 13.4-5.2l-6.2-5.2A12 12 0 0 1 24 36a12 12 0 0 1-11.3-7.9L6 33.3A20 20 0 0 0 24 44Z"/>
+                  <path fill="#1976D2" d="M43.6 20H24v8h11.3a12.2 12.2 0 0 1-4.1 5.6l6.2 5.2C41 35.4 44 30.1 44 24c0-1.4-.1-2.7-.4-4Z"/>
+                </svg>}
+            <span>{isSignup ? "สมัครด้วย Gmail" : "เข้าสู่ระบบด้วย Gmail"}</span>
+          </button>
+
+          <div className="auth-divider"><span>หรือใช้อีเมล</span></div>
+
+          <form onSubmit={handleSubmit}>
+            {/* name field (signup only) */}
+            {isSignup && (
+              <div className="auth-field">
+                <label>ชื่อร้าน / แบรนด์ของคุณ</label>
+                <input className={`auth-input ${errors.name ? "border-err" : ""}`}
+                  value={name} onChange={e => setName(e.target.value)}
+                  placeholder="เช่น ViralShop TH" />
+                {errors.name && <div style={{ color: "var(--err)", fontSize: 12, fontWeight: 600, marginTop: 5 }}>{errors.name}</div>}
+              </div>
+            )}
+
+            {/* email */}
+            <div className="auth-field">
+              <label>อีเมล</label>
+              <input className={`auth-input ${errors.email ? "border-err" : ""}`}
+                type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="youremail@gmail.com" />
+              {errors.email && <div style={{ color: "var(--err)", fontSize: 12, fontWeight: 600, marginTop: 5 }}>{errors.email}</div>}
+            </div>
+
+            {/* password */}
+            <div className="auth-field">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
+                <label style={{ margin: 0 }}>รหัสผ่าน</label>
+                {!isSignup && <a href="#" style={{ fontSize: 12.5, fontWeight: 700, color: "var(--brand)", textDecoration: "none" }}>ลืมรหัสผ่าน?</a>}
+              </div>
+              <div className="pw-wrap">
+                <input className={`auth-input ${errors.password ? "border-err" : ""}`}
+                  type={showPw ? "text" : "password"} value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="อย่างน้อย 6 ตัวอักษร" />
+                <button type="button" className="pw-eye" onClick={() => setShowPw(!showPw)} tabIndex={-1}>
+                  <Icon name={showPw ? "eyeoff" : "eye"} size={17} />
+                </button>
+              </div>
+              {errors.password && <div style={{ color: "var(--err)", fontSize: 12, fontWeight: 600, marginTop: 5 }}>{errors.password}</div>}
+            </div>
+
+            {/* confirm password (signup) */}
+            {isSignup && (
+              <div className="auth-field">
+                <label>ยืนยันรหัสผ่าน</label>
+                <div className="pw-wrap">
+                  <input className={`auth-input ${errors.confirm ? "border-err" : ""}`}
+                    type={showPw ? "text" : "password"} value={confirm}
+                    onChange={e => setConfirm(e.target.value)}
+                    placeholder="ใส่รหัสผ่านอีกครั้ง" />
+                </div>
+                {errors.confirm && <div style={{ color: "var(--err)", fontSize: 12, fontWeight: 600, marginTop: 5 }}>{errors.confirm}</div>}
+              </div>
+            )}
+
+            {/* plan selector (signup) */}
+            {isSignup && (
+              <div className="auth-plan-pick">
+                <label>เลือกแพ็กเกจเริ่มต้น</label>
+                <div className="plan-pills">
+                  {PLANS_DATA.map(p => (
+                    <div key={p.id} className={`plan-pill ${plan === p.id ? "on" : ""}`} onClick={() => setPlan(p.id)}>
+                      {p.popular && <span className="pptag">ยอดนิยม</span>}
+                      <div className={`ppn ${p.popular ? "pop" : ""}`}>{p.label}</div>
+                      <div className="ppp">{p.price}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* agree (signup) */}
+            {isSignup && (
+              <label className="check-row">
+                <input type="checkbox" checked={agree} onChange={e => setAgree(e.target.checked)} />
+                <span>ยอมรับ <a href="#" style={{ color: "var(--brand)" }}>เงื่อนไขการใช้งาน</a> และ <a href="#" style={{ color: "var(--brand)" }}>นโยบายความเป็นส่วนตัว</a></span>
+              </label>
+            )}
+            {errors.agree && <div style={{ color: "var(--err)", fontSize: 12, fontWeight: 600, marginTop: -8, marginBottom: 12 }}>{errors.agree}</div>}
+
+            <button type="submit" className="btn-auth" disabled={loading}>
+              {loading
+                ? <span className="spinner" />
+                : isSignup ? "สร้างบัญชีฟรี" : "เข้าสู่ระบบ"}
+            </button>
+          </form>
+
+          <div className="auth-footer">
+            {isSignup
+              ? <>มีบัญชีแล้ว? <a href="#" onClick={e => { e.preventDefault(); switchMode("login"); }}>เข้าสู่ระบบ</a></>
+              : <>ยังไม่มีบัญชี? <a href="#" onClick={e => { e.preventDefault(); switchMode("signup"); }}>สมัครฟรี</a></>}
+          </div>
+
+          {!isSignup && (
+            <div className="auth-terms">
+              <a href="landing.html">← ดูหน้าแพ็กเกจและฟีเจอร์</a>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* toast */}
+      {toast && (
+        <div className="auth-toast">
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: "var(--ok-bg)", color: "var(--ok)", display: "grid", placeItems: "center" }}>
+            <Icon name="check" size={17} />
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{toast.msg}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* inline styles for error borders */
+const style = document.createElement("style");
+style.textContent = `.border-err { border-color: var(--err) !important; }`;
+document.head.appendChild(style);
+
+ReactDOM.createRoot(document.getElementById("root")).render(<AuthApp />);
+</script>
+</body>
+</html>

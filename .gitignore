@@ -1,0 +1,15 @@
+# dependencies
+node_modules/
+scheduler/node_modules/
+
+# secrets — สำคัญมาก ห้าม commit!
+# หมายเหตุ: config.js ใส่ได้ปลอดภัย เพราะ anon key ถูกป้องกันด้วย RLS
+# แต่ service_role key (ใน scheduler/.env) เป็นความลับ ห้ามหลุดเด็ดขาด
+scheduler/.env
+scheduler/gdrive-sa.json
+scheduler/tmp/
+
+# OS / editor
+.DS_Store
+*.log
+.vercel

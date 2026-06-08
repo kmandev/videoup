@@ -1,0 +1,17 @@
+[Unit]
+Description=VideoUp Upload Scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# แก้ path/user ให้ตรงกับเครื่อง Pi ของคุณ
+User=pi
+WorkingDirectory=/home/pi/videoup/scheduler
+ExecStart=/usr/bin/node index.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

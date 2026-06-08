@@ -1,0 +1,170 @@
+/* ============================================================
+   VideoUp — Dashboard screen
+   ============================================================ */
+function Dashboard({ go, openCreate, openPost }) {
+  const stats = platformStats();
+  const now = TODAY;
+  const in24 = new Date(now); in24.setHours(now.getHours() + 24);
+
+  const scheduledPosts = POSTS.filter(p => ["scheduled", "publishing"].includes(postStatus(p)));
+  const upcoming = scheduledPosts.filter(p => p.when >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))
+    .sort((a, b) => a.when - b.when);
+  const next24 = scheduledPosts.filter(p => p.when >= now && p.when <= in24);
+
+  let publishedToday = 0, failedTotal = 0;
+  POSTS.forEach(p => Object.entries(p.platforms).forEach(([k, st]) => {
+    if (st === "published" && sameDay(p.when, now)) publishedToday++;
+    if (st === "failed") failedTotal++;
+  }));
+
+  const STAT_CARDS = [
+    { ico: "calendar", color: "var(--info)",  bg: "var(--info-bg)",  num: scheduledPosts.length, lbl: "คลิปตั้งเวลาไว้", sub: "Scheduled" },
+    { ico: "rocket",   color: "var(--brand)", bg: "var(--brand-soft)", num: next24.length, lbl: "กำลังจะโพสต์ 24 ชม.", sub: "Next 24h" },
+    { ico: "check",    color: "var(--ok)",    bg: "var(--ok-bg)",    num: publishedToday, lbl: "โพสต์สำเร็จวันนี้", sub: "Published today" },
+    { ico: "alert",    color: "var(--err)",   bg: "var(--err-bg)",   num: failedTotal, lbl: "ล้มเหลว ต้องแก้", sub: "Failed" },
+  ];
+
+  // activity feed (recent published / failed / publishing)
+  const activity = [];
+  POSTS.forEach(p => Object.entries(p.platforms).forEach(([k, st]) => {
+    if (["published", "failed", "publishing"].includes(st))
+      activity.push({ post: p, plat: k, st, when: p.when });
+  }));
+  activity.sort((a, b) => b.when - a.when);
+
+  return (
+    <div className="grid" style={{ gap: 22 }}>
+      {/* stat cards */}
+      <div className="grid stat-grid">
+        {STAT_CARDS.map((s, i) => (
+          <button key={i} className="stat" style={{ textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit" }}
+            onClick={() => go(s.ico === "alert" ? "calendar" : "calendar")}>
+            <div className="ico" style={{ background: s.bg, color: s.color }}><Icon name={s.ico} size={19} /></div>
+            <div className="num">{s.num}</div>
+            <div className="lbl">{s.lbl}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* platform status row */}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 13 }}>
+          <h2 className="section-title">สถานะแพลตฟอร์ม</h2>
+          <span className="muted" style={{ fontSize: 13, fontWeight: 600, marginLeft: 9 }}>Platform status</span>
+        </div>
+        <div className="plat-row">
+          {PLATFORM_LIST.map(id => {
+            const p = PLATFORMS[id], st = stats[id];
+            return (
+              <div key={id} className="plat-card">
+                <div className="top">
+                  <PlatformBadge id={id} />
+                  <div style={{ minWidth: 0 }}>
+                    <div className="nm">{p.short}</div>
+                    <div className="conn" style={{ color: "var(--ok)", display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: 99, background: "var(--ok)" }} />เชื่อมต่อแล้ว
+                    </div>
+                  </div>
+                </div>
+                <div className="plat-stats">
+                  <div className="ps"><div className="n" style={{ color: "var(--ok)" }}>{st.published}</div><div className="t">สำเร็จ</div></div>
+                  <div className="ps"><div className="n" style={{ color: "var(--info)" }}>{st.scheduled}</div><div className="t">ตั้งเวลา</div></div>
+                  <div className="ps"><div className="n" style={{ color: st.failed ? "var(--err)" : "var(--text-mute)" }}>{st.failed}</div><div className="t">ล้มเหลว</div></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* two columns */}
+      <div className="dash-cols">
+        {/* upcoming */}
+        <div className="card card-pad">
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+            <h2 className="section-title">คิวที่จะโพสต์ถัดไป</h2>
+            <Btn size="sm" variant="ghost" iconR="chevR" style={{ marginLeft: "auto" }} onClick={() => go("calendar")}>ดูปฏิทิน</Btn>
+          </div>
+          {upcoming.slice(0, 6).map(p => {
+            const ids = Object.keys(p.platforms);
+            const ps = postStatus(p);
+            return (
+              <div key={p.id} className="upcoming-item" style={{ cursor: "pointer" }} onClick={() => openPost(p)}>
+                <div className="thumb"><VideoThumb vid={p.vid} showPlay={false} /></div>
+                <div className="meta">
+                  <div className="ttl">{p.title}</div>
+                  <div className="when">
+                    <Icon name="clock" size={13} />{relDay(p.when)} · {fmtTime(p.when)} น.
+                  </div>
+                </div>
+                <PlatformStack ids={ids} />
+                <div style={{ width: 92, textAlign: "right" }}>
+                  {ps === "publishing"
+                    ? <span className="badge warn"><span className="dot" style={{ animation: "pulse 1s infinite" }} />กำลังโพสต์</span>
+                    : <StatusBadge status={ps} />}
+                </div>
+              </div>
+            );
+          })}
+          <Btn variant="ghost" icon="plus" style={{ width: "100%", marginTop: 12, borderStyle: "dashed" }} onClick={openCreate}>
+            สร้างโพสต์ใหม่
+          </Btn>
+        </div>
+
+        {/* right column */}
+        <div className="grid" style={{ gap: 18 }}>
+          {/* storage status */}
+          <div className="card card-pad">
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
+              <div className="ico" style={{ width: 30, height: 30, borderRadius: 9, background: "var(--warn-bg)", color: "var(--warn)", display: "grid", placeItems: "center" }}>
+                <Icon name="drive" size={15} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>Google Drive</div>
+                <div className="mono muted" style={{ fontSize: 10.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{DRIVE.folder}</div>
+              </div>
+              <span className="badge ok" style={{ marginLeft: "auto" }}><span className="dot" />เชื่อมต่อ</span>
+            </div>
+            <div className="grid" style={{ gap: 13 }}>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, fontWeight: 600, marginBottom: 5 }}>
+                  <span className="muted">พื้นที่</span><span className="mono">{DRIVE.usedGB} / {DRIVE.totalGB} GB</span>
+                </div>
+                <Bar value={DRIVE.usedGB} max={DRIVE.totalGB} color="var(--warn)" />
+              </div>
+              <div style={{ display: "flex", gap: 18, fontSize: 12.5, fontWeight: 600, color: "var(--text-dim)" }}>
+                <span>คลัง <b style={{ color: "var(--text)" }}>{DRIVE.folder}</b></span>
+                <span style={{ marginLeft: "auto" }}>{DRIVE.account}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* activity */}
+          <div className="card card-pad">
+            <h2 className="section-title" style={{ marginBottom: 8 }}>กิจกรรมล่าสุด</h2>
+            {activity.slice(0, 7).map((a, i) => {
+              const conf = a.st === "published" ? { c: "var(--ok)", bg: "var(--ok-bg)", ic: "check", t: "โพสต์สำเร็จ" }
+                : a.st === "failed" ? { c: "var(--err)", bg: "var(--err-bg)", ic: "x", t: "อัปโหลดล้มเหลว" }
+                : { c: "var(--warn)", bg: "var(--warn-bg)", ic: "upload", t: "กำลังอัปโหลด" };
+              return (
+                <div key={i} className="activity-item">
+                  <div className="adot" style={{ background: conf.bg, color: conf.c }}><Icon name={conf.ic} size={15} /></div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="atxt">
+                      <b>{conf.t}</b> · {PLATFORMS[a.plat].short}
+                      <div className="muted" style={{ fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.post.title}</div>
+                    </div>
+                    <div className="atime">{relDay(a.when)} · {fmtTime(a.when)} น.</div>
+                  </div>
+                  <PlatformBadge id={a.plat} size="sm" />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { Dashboard });

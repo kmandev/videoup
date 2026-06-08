@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VideoUp — ปล่อยคลิปขายทุกแพลตฟอร์มในคลิกเดียว</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  /* landing-only overrides */
+  body { background: var(--bg); }
+  .land-nav {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; gap: 16px; padding: 14px 32px;
+    background: color-mix(in oklab, var(--bg) 88%, transparent);
+    backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
+  }
+  .land-nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+  .land-nav-logo .brand-mark { width: 34px; height: 34px; border-radius: 10px; }
+  .land-nav-logo .brand-name { font-weight: 800; font-size: 18px; letter-spacing: -.02em; }
+  .land-nav-links { display: flex; gap: 4px; margin-left: auto; }
+  .land-nav-links a { font-size: 14px; font-weight: 600; color: var(--text-dim); text-decoration: none; padding: 8px 12px; border-radius: 9px; }
+  .land-nav-links a:hover { color: var(--text); background: var(--surface-2); }
+  .land-wrap { max-width: 1160px; margin: 0 auto; padding: 36px 28px 80px; }
+  @media (max-width: 640px) {
+    .land-nav { padding: 12px 16px; }
+    .land-nav-links .hide-sm { display: none; }
+    .land-wrap { padding: 24px 16px 60px; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="saas-data.jsx"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="screen-landing.jsx"></script>
+
+<script type="text/babel">
+const { useState } = React;
+
+function LandingApp() {
+  const [upgradeTarget, setUpgradeTarget] = useState(null);
+
+  const handleSelect = (planId) => {
+    setUpgradeTarget(planId);
+    setTimeout(() => {
+      window.location.href = `auth.html?mode=signup&plan=${planId}`;
+    }, 400);
+  };
+
+  const handleGetStarted = () => {
+    window.location.href = "auth.html?mode=signup";
+  };
+
+  return (
+    <>
+      {/* NAV */}
+      <nav className="land-nav">
+        <a className="land-nav-logo" href="index.html">
+          <div className="brand-mark" style={{
+            width: 34, height: 34, borderRadius: 10,
+            background: "linear-gradient(135deg,var(--brand),var(--brand-2))",
+            display: "grid", placeItems: "center",
+            boxShadow: "0 4px 12px -4px color-mix(in oklab,var(--brand) 60%,transparent)"
+          }}>
+            <Icon name="rocket" size={18} style={{ color: "#fff" }} />
+          </div>
+          <span className="brand-name">VideoUp</span>
+        </a>
+        <div className="land-nav-links">
+          <a href="#features" className="hide-sm">ฟีเจอร์</a>
+          <a href="#pricing">ราคา</a>
+          <a href="#faq" className="hide-sm">FAQ</a>
+          <a href="auth.html" style={{ marginLeft: 6 }}>
+            <span className="btn primary sm">
+              <Icon name="grid" size={15} />เข้าสู่ระบบ
+            </span>
+          </a>
+        </div>
+      </nav>
+
+      {/* LANDING PAGE */}
+      <div className="land-wrap">
+        <Landing
+          currentPlan={null}
+          onSelectPlan={handleSelect}
+          onGetStarted={handleGetStarted}
+        />
+      </div>
+
+      {/* upgrade redirect toast */}
+      {upgradeTarget && (
+        <div className="toasts">
+          <div className="toast">
+            <div className="ti" style={{ background: "var(--brand-soft)", color: "var(--brand)" }}>
+              <Icon name="rocket" size={17} />
+            </div>
+            <div>
+              <div className="tt">กำลังพาไปสมัคร {PLAN(upgradeTarget).name} 🎉</div>
+              <div className="td">เปิดแอปเพื่อดำเนินการต่อ...</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<LandingApp />);
+</script>
+</body>
+</html>
