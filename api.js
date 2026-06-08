@@ -98,6 +98,26 @@
       return ok(await window.sb.from('platform_connections').select('*'));
     },
 
+    // เริ่ม OAuth เชื่อมแพลตฟอร์ม (YouTube ฯลฯ) → คืน authUrl ให้ redirect
+    async startPlatformOAuth(platform) {
+      if (!window.sb) demo();
+      const { data: { session } } = await window.sb.auth.getSession();
+      if (!session) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+      const res = await fetch(`${window.SUPABASE_URL}/functions/v1/oauth-platform/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ platform, returnTo: window.location.origin + window.location.pathname }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'เริ่มเชื่อมต่อไม่สำเร็จ');
+      return j.authUrl;
+    },
+
+    async disconnectPlatform(id) {
+      if (!window.sb) demo();
+      ok(await window.sb.from('platform_connections').delete().eq('id', id));
+    },
+
     /* ---------- VIDEOS ---------- */
     // สแกนไฟล์วิดีโอจาก cloud source → บันทึกลงตาราง videos (เรียก Edge Function)
     async scanSource(sourceId) {

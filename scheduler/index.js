@@ -9,7 +9,7 @@
    ============================================================ */
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
-import { adapters, fetchVideoFile, deleteFromSource } from './platforms.js';
+import { adapters, fetchVideoFile, deleteFromSource, freshPlatformToken } from './platforms.js';
 
 const { SUPABASE_URL, SUPABASE_SERVICE_KEY } = process.env;
 const POLL = (Number(process.env.POLL_INTERVAL) || 60) * 1000;
@@ -61,9 +61,23 @@ async function processPost(post) {
     if (!adapter) { log(`  ? ไม่มี adapter สำหรับ ${t.platform}`); continue; }
     await sb.from('post_platforms').update({ status: 'publishing' }).eq('id', t.id);
     try {
+      // ดึง platform connection ของ user แล้ว refresh token ถ้าจำเป็น
+      let token = null, conn = null;
+      const { data: c } = await sb.from('platform_connections')
+        .select('*').eq('user_id', post.user_id).eq('platform', t.platform).maybeSingle();
+      conn = c;
+      if (conn && conn.connected) {
+        const fr = await freshPlatformToken(conn);
+        token = fr.token;
+        if (fr.refreshed) {
+          await sb.from('platform_connections')
+            .update({ credentials: fr.credentials, expires_at: fr.expires_at }).eq('id', conn.id);
+        }
+      }
       const { externalUrl } = await adapter({
         video, ...file,
         caption: t.caption, hashtags: t.hashtags, link: t.affiliate_link,
+        conn, token,
       });
       await sb.from('post_platforms').update({
         status: 'published', external_url: externalUrl,

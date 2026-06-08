@@ -32,12 +32,87 @@ async function fakeUpload(platform, job) {
   return { externalUrl: `https://${platform}.example/post/${job.video.id.slice(0, 8)}` };
 }
 
+// ---- YouTube: refresh token ของ platform connection (ใช้ Google OAuth client) ----
+// คืน { token, credentials, expires_at, refreshed } ให้ index.js บันทึกกลับถ้า refreshed
+export async function freshPlatformToken(conn) {
+  const c = conn.credentials || {};
+  const notExpired = c.expires_at && new Date(c.expires_at).getTime() > Date.now() + 60000;
+  if (c.access_token && notExpired) return { token: c.access_token, refreshed: false };
+  if (!c.refresh_token) return { token: c.access_token, refreshed: false };
+
+  const CFG = {
+    youtube: {
+      url: 'https://oauth2.googleapis.com/token',
+      id: process.env.YOUTUBE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID,
+      secret: process.env.YOUTUBE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET,
+    },
+  }[conn.platform];
+  if (!CFG) return { token: c.access_token, refreshed: false };
+
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token', refresh_token: c.refresh_token,
+    client_id: CFG.id, client_secret: CFG.secret,
+  });
+  const r = await fetch(CFG.url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+  const j = await r.json();
+  if (!r.ok || !j.access_token) throw new Error(`refresh token (${conn.platform}) ล้มเหลว: ${JSON.stringify(j)}`);
+  const expires_at = j.expires_in ? new Date(Date.now() + j.expires_in * 1000).toISOString() : c.expires_at;
+  return { token: j.access_token, expires_at, refreshed: true,
+           credentials: { ...c, access_token: j.access_token, expires_at } };
+}
+
+// อัปโหลดขึ้น YouTube ของจริง (resumable upload, YouTube Data API v3)
+async function youtubeUpload(job) {
+  const { token, video, localPath } = job;
+  if (!token) throw new Error('ยังไม่ได้เชื่อมต่อ YouTube (ไม่มี access token)');
+
+  const desc = buildDescription(job, 'youtube');
+  // tags จาก hashtags (ตัด # ออก)
+  const tags = (job.hashtags || '').split(/\s+/).map(t => t.replace(/^#/, '')).filter(Boolean).slice(0, 15);
+  const metadata = {
+    snippet: {
+      title: (video.title || 'VideoUp clip').slice(0, 100),
+      description: desc.slice(0, 4900),
+      tags,
+      categoryId: '22', // People & Blogs
+    },
+    status: { privacyStatus: 'public', selfDeclaredMadeForKids: false },
+  };
+
+  // 1) เริ่ม resumable session
+  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': 'video/*',
+    },
+    body: JSON.stringify(metadata),
+  });
+  if (!init.ok) throw new Error(`YouTube init ล้มเหลว: ${init.status} ${await init.text()}`);
+  const uploadUrl = init.headers.get('location');
+  if (!uploadUrl) throw new Error('YouTube ไม่คืน upload URL');
+
+  // 2) อัปโหลดไฟล์
+  const { readFile } = await import('node:fs/promises');
+  const bytes = await readFile(localPath);
+  const put = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'video/*', 'Content-Length': String(bytes.length) },
+    body: bytes,
+  });
+  const j = await put.json();
+  if (!put.ok || !j.id) throw new Error(`YouTube upload ล้มเหลว: ${JSON.stringify(j)}`);
+
+  return { externalUrl: `https://youtube.com/shorts/${j.id}` };
+}
+
 export const adapters = {
   // TODO: TikTok Content Posting API — POST /v2/post/publish/video/init/
   async tiktok(job)   { return fakeUpload('tiktok', job); },
 
-  // TODO: YouTube Data API v3 — videos.insert (resumable upload)
-  async youtube(job)  { return fakeUpload('youtube', job); },
+  // ✅ YouTube Data API v3 — videos.insert (resumable upload) ของจริง
+  async youtube(job)  { return youtubeUpload(job); },
 
   // TODO: Facebook Graph API — /{page-id}/video_reels
   async facebook(job) { return fakeUpload('facebook', job); },

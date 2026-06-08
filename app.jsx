@@ -151,20 +151,21 @@ function App() {
     setTimeout(() => setToasts(ts => ts.filter(x => x.id !== id)), 4200);
   };
 
-  // แจ้งผล OAuth source หลัง redirect กลับ (?source=connected|error|...)
+  // แจ้งผล OAuth หลัง redirect กลับ (?source=... หรือ ?platform=...)
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const s = p.get("source");
-    if (!s) return;
+    const pl = p.get("platform");
+    if (!s && !pl) return;
+    const okTitle = s ? "เชื่อมต่อ source สำเร็จ! ✓" : "เชื่อมต่อแพลตฟอร์มสำเร็จ! ✓";
     const map = {
-      connected:    { kind: "publishing", title: "เชื่อมต่อ source สำเร็จ! ✓", desc: "พร้อมเลือกคลิปมาโพสต์ได้แล้ว" },
+      connected:    { kind: "publishing", title: okTitle, desc: s ? "พร้อมเลือกคลิปมาโพสต์ได้แล้ว" : "พร้อมโพสต์ขึ้นแพลตฟอร์มได้แล้ว" },
       expired:      { kind: "scheduled",  title: "ลิงก์หมดอายุ", desc: "กรุณาลองเชื่อมต่อใหม่อีกครั้ง" },
       token_failed: { kind: "scheduled",  title: "แลก token ไม่สำเร็จ", desc: "ตรวจสอบ client ID/secret ใน Supabase" },
       error:        { kind: "scheduled",  title: "เชื่อมต่อไม่สำเร็จ", desc: "เกิดข้อผิดพลาดระหว่าง OAuth" },
     };
-    pushToast(map[s] || map.error);
-    if (s === "connected") setRoute("settings");
-    // ล้าง query ออกจาก URL
+    pushToast(map[s || pl] || map.error);
+    if ((s || pl) === "connected") setRoute("settings");
     window.history.replaceState({}, "", window.location.pathname);
   }, []);
 

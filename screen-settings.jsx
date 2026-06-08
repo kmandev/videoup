@@ -176,33 +176,73 @@ const PLAT_CONNECTED = { tiktok: true, youtube: true, facebook: true, shopee: tr
 const PLAT_HANDLES   = { tiktok: "@viralshop.th", youtube: "ViralShop TH", facebook: "ViralShop.TH", shopee: "viralshop.official", lazada: "" };
 const PLAT_TOKEN_EXP = { tiktok: "ต่ออายุ 30 ก.ย. 2569", youtube: "ไม่มีหมดอายุ (OAuth)", facebook: "ต่ออายุ 5 ก.ค. 2569", shopee: "ต่ออายุ 15 ส.ค. 2569", lazada: "" };
 
+// แพลตฟอร์มที่ต่อ API จริงแล้ว (เชื่อมผ่าน OAuth) — เจ้าอื่นยังเป็น demo
+const LIVE_PLATFORMS = ["youtube"];
+
 function PlatformsSection({ onSave, saved, onToast }) {
-  const [connected, setConnected] = useState({ ...PLAT_CONNECTED });
+  const live = window.API && window.API.isLive();
+  const [connected, setConnected] = useState(live ? {} : { ...PLAT_CONNECTED });
+  const [rows, setRows] = useState({});       // platform → connection row (live)
+  const [busy, setBusy] = useState(null);
+
+  const load = async () => {
+    if (!live) return;
+    try {
+      const conns = await window.API.listConnections();
+      const c = {}, r = {};
+      (conns || []).forEach(x => { c[x.platform] = !!x.connected; r[x.platform] = x; });
+      setConnected(c); setRows(r);
+    } catch (e) { /* ignore */ }
+  };
+  useEffect(() => { load(); }, []);
+
+  const connect = async (id) => {
+    if (live && LIVE_PLATFORMS.includes(id)) {
+      setBusy(id);
+      try {
+        const authUrl = await window.API.startPlatformOAuth(id);
+        window.location.href = authUrl;
+      } catch (e) { setBusy(null); onToast({ kind: "scheduled", title: "เชื่อมต่อไม่สำเร็จ", desc: e.message }); }
+      return;
+    }
+    // demo / แพลตฟอร์มที่ยังไม่ต่อ API จริง
+    setConnected(c => ({ ...c, [id]: true }));
+    onToast({ kind: "publishing", title: live ? "ยังไม่รองรับการเชื่อมจริง" : "เชื่อมต่อแล้ว! (demo)", desc: PLATFORMS[id].name });
+  };
+
+  const disconnect = async (id) => {
+    if (live && rows[id]) { try { await window.API.disconnectPlatform(rows[id].id); } catch (e) {} }
+    setConnected(c => ({ ...c, [id]: false }));
+    setRows(r => { const n = { ...r }; delete n[id]; return n; });
+    onToast({ kind: "scheduled", title: "ยกเลิกเชื่อมต่อ", desc: PLATFORMS[id].name });
+  };
 
   return (
     <SettingCard title="เชื่อมต่อแพลตฟอร์ม" desc="จัดการบัญชีและ API token แต่ละแพลตฟอร์ม">
       <div className="grid" style={{ gap: 12 }}>
         {PLATFORM_LIST.map(id => {
           const p = PLATFORMS[id], on = connected[id];
+          const liveReady = LIVE_PLATFORMS.includes(id);
+          const handle = live ? (rows[id]?.handle || PLAT_HANDLES[id]) : PLAT_HANDLES[id];
           return (
             <div key={id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", border: `1.5px solid ${on ? "var(--ok-bg)" : "var(--border)"}`, borderRadius: 14, background: on ? "color-mix(in oklab,var(--ok) 4%,var(--surface))" : "var(--surface)", transition: ".15s" }}>
               <PlatformBadge id={id} size="" />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 14.5 }}>{p.name}</div>
+                <div style={{ fontWeight: 800, fontSize: 14.5, display: "flex", alignItems: "center", gap: 8 }}>
+                  {p.name}
+                  {liveReady && <span className="badge ok" style={{ fontSize: 10 }}>API จริง</span>}
+                </div>
                 {on
                   ? <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600 }}>
-                      <span style={{ color: "var(--ok)" }}>{PLAT_HANDLES[id]}</span>
-                      <span className="muted">·</span>
-                      <span className="muted">{PLAT_TOKEN_EXP[id]}</span>
+                      <span style={{ color: "var(--ok)" }}>{handle}</span>
                     </div>
                   : <div className="muted" style={{ fontSize: 12.5, fontWeight: 600 }}>ยังไม่ได้เชื่อมต่อ</div>}
               </div>
               {on
-                ? <div style={{ display: "flex", gap: 8 }}>
-                    <Btn size="sm" variant="ghost" icon="refresh" onClick={() => onToast({ kind: "publishing", title: "ต่ออายุ token", desc: p.name })}>ต่ออายุ</Btn>
-                    <Btn size="sm" variant="ghost" icon="x" onClick={() => { setConnected(c => ({ ...c, [id]: false })); onToast({ kind: "scheduled", title: "ยกเลิกเชื่อมต่อ", desc: p.name }); }}>ยกเลิก</Btn>
-                  </div>
-                : <Btn size="sm" variant="primary" icon="link" onClick={() => { setConnected(c => ({ ...c, [id]: true })); onToast({ kind: "publishing", title: "เชื่อมต่อแล้ว!", desc: p.name }); }}>เชื่อมต่อ</Btn>}
+                ? <Btn size="sm" variant="ghost" icon="x" onClick={() => disconnect(id)}>ยกเลิก</Btn>
+                : <Btn size="sm" variant="primary" icon="link" disabled={busy === id} onClick={() => connect(id)}>
+                    {busy === id ? "กำลังเปิด..." : "เชื่อมต่อ"}
+                  </Btn>}
             </div>
           );
         })}
