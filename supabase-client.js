@@ -8,13 +8,19 @@
     window.sb = null;
     return;
   }
-  const { createClient } = window.supabase;
-  window.sb = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
-    auth: {
-      persistSession: true,
-      storageKey: 'videoup_session',
-      autoRefreshToken: true,
-    },
-  });
-  console.log('[VideoUp] Supabase connected ✓');
+  try {
+    const { createClient } = window.supabase;
+    window.sb = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        storageKey: 'videoup_session',
+        autoRefreshToken: true,
+      },
+    });
+    console.log('[VideoUp] Supabase connected ✓ (live mode)');
+    console.log('[VideoUp] URL:', window.SUPABASE_URL);
+  } catch (err) {
+    console.error('[VideoUp] Supabase init ล้มเหลว — ตกใน Demo Mode:', err);
+    window.sb = null;
+  }
 })();
