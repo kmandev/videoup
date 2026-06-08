@@ -94,15 +94,21 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
   const filtered = allVideos.filter(x => x.source === activeSource);
   const src = srcInfo(activeSource);
 
-  const doPublish = () => {
-    if (!canPublish) return;
-    onPublish({
-      vid, platforms: selectedPlats, mode,
-      when: mode === "now" ? "ทันที" : `${date} ${time}`,
-      title: v.title,
-      cleanup, cleanupDelay,
-      source: v.source,
-    });
+  const [publishing, setPublishing] = useState(false);
+  const doPublish = async () => {
+    if (!canPublish || publishing) return;
+    setPublishing(true);
+    try {
+      await onPublish({
+        vid, platforms: selectedPlats, mode,
+        when: mode === "now" ? "ทันที" : `${date} ${time}`,
+        scheduledISO: `${date}T${time}:00`,
+        title: v.title,
+        content,            // เนื้อหาต่อแพลตฟอร์ม (caption/hashtags/link)
+        cleanup, cleanupDelay,
+        source: v.source,
+      });
+    } finally { setPublishing(false); }
   };
 
   return (
@@ -410,8 +416,8 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
           <Btn variant="ghost" onClick={onCancel}>ยกเลิก</Btn>
-          <Btn variant="primary" icon={mode === "now" ? "rocket" : "calendar"} disabled={!canPublish} onClick={doPublish}>
-            {mode === "now" ? "โพสต์เลย" : "ยืนยันตั้งเวลา"}
+          <Btn variant="primary" icon={mode === "now" ? "rocket" : "calendar"} disabled={!canPublish || publishing} onClick={doPublish}>
+            {publishing ? (mode === "now" ? "กำลังโพสต์..." : "กำลังบันทึก...") : (mode === "now" ? "โพสต์เลย" : "ยืนยันตั้งเวลา")}
           </Btn>
         </div>
       </div>

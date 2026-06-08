@@ -48,11 +48,19 @@ function App() {
   const [liveVideos, setLiveVideos] = useState(null);
   const [liveSources, setLiveSources] = useState(null);
 
+  // normalize posts จาก view (scheduled_at string) → ให้มี when(Date) + title สำหรับ UI
+  const normPosts = (arr) => (arr || []).map(p => ({
+    ...p,
+    title: p.title || p.video_title || "โพสต์",
+    when: p.scheduled_at ? new Date(p.scheduled_at) : new Date(),
+    platforms: p.platforms || {},
+  }));
+
   const posts   = livePosts   !== null ? livePosts   : POSTS;
   const videos  = liveVideos  !== null ? liveVideos  : VIDEOS;
   const sources = liveSources !== null ? liveSources : SOURCE_LIST.filter(id => id !== "url").map(id => ({ ...SOURCES[id], type: id }));
 
-  // reload videos+sources (เรียกหลัง upload/sync)
+  // reload videos+sources+posts (เรียกหลัง upload/sync/publish)
   const reloadLibrary = async () => {
     if (!window.API || !window.API.isLive()) return;
     try {
@@ -65,6 +73,7 @@ function App() {
         cover: v.cover || "linear-gradient(135deg,#6C4DFF,#2D7BFF)",
         source: byId[v.source_id] || "gdrive", source_id: v.source_id, file_path: v.file_path,
       })));
+      try { setLivePosts(normPosts(await window.API.listPosts())); } catch (_) {}
     } catch (e) { console.warn("[VideoUp] reload library:", e.message); }
   };
 
@@ -97,7 +106,7 @@ function App() {
       // โหลด posts จริงจาก Supabase
       try {
         const data = await window.API.listPosts();
-        setLivePosts(data || []);
+        setLivePosts(normPosts(data));
       } catch (e) { console.warn("[VideoUp] โหลด posts ไม่สำเร็จ:", e.message); setLivePosts([]); }
 
       // โหลด sources + videos จริงจาก Supabase
@@ -173,16 +182,44 @@ function App() {
   const openCreate = (date) => { setCreateSeed({ date: date instanceof Date ? date : null, vid: null }); go("create"); };
   const openPost = (p) => setDetail(p);
 
-  const handlePublish = (payload) => {
+  const handlePublish = async (payload) => {
     const cleanupTxt = payload.cleanup
       ? ` · ลบไฟล์${payload.cleanupDelay === "immediate" ? "ทันที" : payload.cleanupDelay === "24h" ? "หลัง 24 ชม." : "หลัง 7 วัน"}`
       : "";
-    pushToast({
-      kind: payload.mode === "now" ? "publishing" : "scheduled",
-      title: payload.mode === "now" ? "ส่งเข้าคิวแล้ว! 🚀" : "ตั้งเวลาเรียบร้อย ✓",
-      desc: `${payload.title} · ${payload.platforms.length} แพลตฟอร์ม · ${payload.when}${cleanupTxt}`,
-    });
-    go(payload.mode === "now" ? "dashboard" : "calendar");
+
+    // Demo mode — แค่ toast
+    if (!window.API || !window.API.isLive()) {
+      pushToast({
+        kind: payload.mode === "now" ? "publishing" : "scheduled",
+        title: payload.mode === "now" ? "ส่งเข้าคิวแล้ว! 🚀" : "ตั้งเวลาเรียบร้อย ✓",
+        desc: `${payload.title} · ${payload.platforms.length} แพลตฟอร์ม · ${payload.when}${cleanupTxt}`,
+      });
+      go(payload.mode === "now" ? "dashboard" : "calendar");
+      return;
+    }
+
+    // Live mode — บันทึกลง DB จริง
+    try {
+      const post = await window.API.createPost(payload);
+      if (payload.mode === "now") {
+        pushToast({ kind: "publishing", title: "กำลังอัปโหลดขึ้นแพลตฟอร์ม... 🚀", desc: `${payload.title} · ${payload.platforms.length} แพลตฟอร์ม` });
+        go("dashboard");
+        // เรียก Edge Function โพสต์จริงทันที
+        const r = await window.API.publishPost(post.id);
+        const ok = r.status === "published";
+        pushToast({
+          kind: ok ? "publishing" : "scheduled",
+          title: ok ? "โพสต์สำเร็จ ✓" : r.status === "partial" ? "โพสต์บางส่วนสำเร็จ" : "โพสต์ไม่สำเร็จ",
+          desc: ok ? `${payload.title} ขึ้นแพลตฟอร์มแล้ว` : "ดูรายละเอียดใน Dashboard",
+        });
+        await reloadLibrary();
+      } else {
+        pushToast({ kind: "scheduled", title: "ตั้งเวลาเรียบร้อย ✓", desc: `${payload.title} · ${payload.when}${cleanupTxt}` });
+        go("calendar");
+      }
+    } catch (e) {
+      pushToast({ kind: "scheduled", title: "เกิดข้อผิดพลาด", desc: e.message });
+    }
   };
 
   const upcomingCount = posts.filter(p => ["scheduled", "publishing"].includes(postStatus(p))).length;

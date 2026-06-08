@@ -222,6 +222,21 @@
       return post;
     },
 
+    // โพสต์จริงทันที (เรียก Edge Function publish-post) → อัปขึ้นแพลตฟอร์มเลย
+    async publishPost(postId) {
+      if (!window.sb) demo();
+      const { data: { session } } = await window.sb.auth.getSession();
+      if (!session) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+      const res = await fetch(`${window.SUPABASE_URL}/functions/v1/publish-post`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ postId }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'โพสต์ไม่สำเร็จ');
+      return j;
+    },
+
     async deletePost(id) {
       if (!window.sb) demo();
       ok(await window.sb.from('posts').delete().eq('id', id));
