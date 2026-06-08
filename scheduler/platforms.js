@@ -61,48 +61,88 @@ export async function freshPlatformToken(conn) {
            credentials: { ...c, access_token: j.access_token, expires_at } };
 }
 
+// YouTube จัดวิดีโอเป็น "Short" จาก: แนวตั้ง 9:16 + ยาว ≤60 วิ + มี #Shorts ใน title/description
+function ensureShorts(text) {
+  return /#shorts/i.test(text) ? text : `${text}\n\n#Shorts`;
+}
+
 // อัปโหลดขึ้น YouTube ของจริง (resumable upload, YouTube Data API v3)
+// อ้างอิง: https://developers.google.com/youtube/v3/docs/videos/insert
 async function youtubeUpload(job) {
   const { token, video, localPath } = job;
   if (!token) throw new Error('ยังไม่ได้เชื่อมต่อ YouTube (ไม่มี access token)');
 
-  const desc = buildDescription(job, 'youtube');
-  // tags จาก hashtags (ตัด # ออก)
-  const tags = (job.hashtags || '').split(/\s+/).map(t => t.replace(/^#/, '')).filter(Boolean).slice(0, 15);
+  // title ≤100 ตัว, ตัด < > ออก (YouTube ไม่อนุญาต)
+  const title = (video.title || 'VideoUp clip').replace(/[<>]/g, '').slice(0, 100) || 'VideoUp clip';
+  // description ≤5000 ตัว + บังคับมี #Shorts
+  const description = ensureShorts(buildDescription(job, 'youtube')).slice(0, 4900);
+
+  // tags จาก hashtags (ตัด # ออก) + ใส่ Shorts
+  const tags = [...new Set([
+    ...(job.hashtags || '').split(/\s+/).map(t => t.replace(/^#/, '')).filter(Boolean),
+    'Shorts',
+  ])].slice(0, 15);
+
+  // option ต่อโพสต์ (ถ้ามีใน job) ไม่งั้นใช้ค่า default ที่เหมาะกับร้านค้า
+  const privacyStatus  = job.privacy || 'public';          // app ที่ยังไม่ audit จะถูกบังคับเป็น private อยู่ดี
+  const madeForKids    = job.madeForKids ?? false;          // ต้องระบุเสมอ (COPPA)
+  const synthetic      = job.containsSyntheticMedia ?? false; // field ปี 2025 (AI/สังเคราะห์)
+  const notify         = job.notifySubscribers ?? true;     // แจ้งเตือนผู้ติดตาม
+
   const metadata = {
     snippet: {
-      title: (video.title || 'VideoUp clip').slice(0, 100),
-      description: desc.slice(0, 4900),
+      title,
+      description,
       tags,
-      categoryId: '22', // People & Blogs
+      categoryId: job.categoryId || '22',  // 22 = People & Blogs
+      defaultLanguage: 'th',
     },
-    status: { privacyStatus: 'public', selfDeclaredMadeForKids: false },
+    status: {
+      privacyStatus,
+      selfDeclaredMadeForKids: madeForKids,
+      containsSyntheticMedia: synthetic,
+      embeddable: true,
+      license: 'youtube',
+    },
   };
 
-  // 1) เริ่ม resumable session
-  const init = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json; charset=UTF-8',
-      'X-Upload-Content-Type': 'video/*',
-    },
-    body: JSON.stringify(metadata),
-  });
+  const { readFile, stat } = await import('node:fs/promises');
+  const fileStat = await stat(localPath);
+  const contentType = /\.mov$/i.test(localPath) ? 'video/quicktime'
+                    : /\.webm$/i.test(localPath) ? 'video/webm' : 'video/mp4';
+
+  // 1) เริ่ม resumable session (ส่ง metadata + ขนาด/ชนิดไฟล์ล่วงหน้า)
+  const init = await fetch(
+    `https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status&notifySubscribers=${notify}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': contentType,
+        'X-Upload-Content-Length': String(fileStat.size),
+      },
+      body: JSON.stringify(metadata),
+    });
   if (!init.ok) throw new Error(`YouTube init ล้มเหลว: ${init.status} ${await init.text()}`);
   const uploadUrl = init.headers.get('location');
   if (!uploadUrl) throw new Error('YouTube ไม่คืน upload URL');
 
-  // 2) อัปโหลดไฟล์
-  const { readFile } = await import('node:fs/promises');
+  // 2) อัปโหลดไฟล์จริง
   const bytes = await readFile(localPath);
   const put = await fetch(uploadUrl, {
     method: 'PUT',
-    headers: { 'Content-Type': 'video/*', 'Content-Length': String(bytes.length) },
+    headers: { 'Content-Type': contentType, 'Content-Length': String(bytes.length) },
     body: bytes,
   });
   const j = await put.json();
   if (!put.ok || !j.id) throw new Error(`YouTube upload ล้มเหลว: ${JSON.stringify(j)}`);
+
+  // เตือนถ้า YouTube บังคับเป็น private (app ยังไม่ผ่าน audit)
+  const actualPrivacy = j.status?.privacyStatus;
+  if (actualPrivacy && actualPrivacy !== privacyStatus) {
+    console.warn(`   ⚠ YouTube ตั้งวิดีโอเป็น "${actualPrivacy}" (ขอ "${privacyStatus}") — ต้องยื่น API audit เพื่อให้ public ได้`);
+  }
 
   return { externalUrl: `https://youtube.com/shorts/${j.id}` };
 }
