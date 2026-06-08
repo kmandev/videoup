@@ -44,6 +44,13 @@ function App() {
   const [upgradeTo, setUpgradeTo] = useState(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
+  // real posts + videos from Supabase (live mode), fallback to mock
+  const [livePosts, setLivePosts] = useState(null);   // null = ยังไม่โหลด, [] = โหลดแล้วแต่ว่าง
+  const [liveVideos, setLiveVideos] = useState(null);
+
+  const posts  = livePosts  !== null ? livePosts  : POSTS;
+  const videos = liveVideos !== null ? liveVideos : VIDEOS;
+
   // load user — ดึง profile จริงจาก Supabase ใน live mode, fallback mock ใน demo
   const mockUser = (() => { try { return JSON.parse(localStorage.getItem("videoup_user")); } catch { return null; } })() || { name: "ViralShop TH", email: "viralshop@gmail.com", avatar: "V" };
   const [user, setUser] = useState(mockUser);
@@ -51,6 +58,7 @@ function App() {
   useEffect(() => {
     if (!window.API || !window.API.isLive()) return;
     (async () => {
+      // โหลด profile
       try {
         const authUser = await window.API.auth.current();
         if (!authUser) return;
@@ -68,6 +76,23 @@ function App() {
         if (u.plan) setPlan(u.plan);
         localStorage.setItem("videoup_user", JSON.stringify(u));
       } catch (e) { console.warn("[VideoUp] โหลดโปรไฟล์ไม่สำเร็จ:", e.message); }
+
+      // โหลด posts จริงจาก Supabase
+      try {
+        const data = await window.API.listPosts();
+        setLivePosts(data || []);
+      } catch (e) { console.warn("[VideoUp] โหลด posts ไม่สำเร็จ:", e.message); setLivePosts([]); }
+
+      // โหลด videos จริงจาก Supabase (ถ้ามี source เชื่อมต่อแล้ว)
+      try {
+        const sources = await window.API.listSources();
+        if (sources && sources.length > 0) {
+          const vids = await window.API.listVideos(sources[0].id);
+          setLiveVideos(vids || []);
+        } else {
+          setLiveVideos([]);
+        }
+      } catch (e) { console.warn("[VideoUp] โหลด videos ไม่สำเร็จ:", e.message); setLiveVideos([]); }
     })();
   }, []);
 
@@ -139,7 +164,7 @@ function App() {
     go(payload.mode === "now" ? "dashboard" : "calendar");
   };
 
-  const upcomingCount = POSTS.filter(p => ["scheduled", "publishing"].includes(postStatus(p))).length;
+  const upcomingCount = posts.filter(p => ["scheduled", "publishing"].includes(postStatus(p))).length;
 
   const requestPlan = (planId) => { if (planId !== plan) setUpgradeTo(planId); };
   const confirmPlan = () => {
@@ -153,8 +178,8 @@ function App() {
   };
 
   let screen;
-  if (route === "dashboard") screen = <Dashboard go={go} openCreate={() => openCreate()} openPost={openPost} />;
-  else if (route === "calendar") screen = <Calendar openCreate={openCreate} openPost={openPost} />;
+  if (route === "dashboard") screen = <Dashboard go={go} openCreate={() => openCreate()} openPost={openPost} posts={posts} />;
+  else if (route === "calendar") screen = <Calendar openCreate={openCreate} openPost={openPost} posts={posts} />;
   else if (route === "billing")  screen = <Billing currentPlan={plan} onChangePlan={requestPlan} onToast={pushToast} />;
   else if (route === "settings") screen = <Settings onToast={pushToast} user={user} />;
   else screen = <CreatePost initialVid={createSeed.vid} initialDate={createSeed.date}
@@ -188,10 +213,6 @@ function App() {
       ))}
       <div className="nav-label">บัญชี</div>
       <button className="nav-item" onClick={() => go("settings")}><Icon name="settings" size={19} /><span>ตั้งค่า</span></button>
-      <a className="nav-item" href="landing.html" target="_blank" rel="noopener" style={{ textDecoration: "none" }}>
-        <Icon name="tag" size={19} /><span>หน้าขาย / ราคา</span>
-        <Icon name="chevR" size={14} style={{ marginLeft: "auto", opacity: .5 }} />
-      </a>
 
       <div className="sidebar-foot">
         <button onClick={() => go("billing")} style={{ width: "100%", textAlign: "left", border: "1px solid var(--border)", background: "var(--brand-soft)", borderRadius: 13, padding: "11px 13px", marginBottom: 10, display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>

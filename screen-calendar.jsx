@@ -1,19 +1,20 @@
 /* ============================================================
    VideoUp — Calendar / schedule screen
    ============================================================ */
-function Calendar({ openCreate, openPost }) {
+function Calendar({ openCreate, openPost, posts: propPosts }) {
   const [view, setView] = useState("month"); // month | list
+  const allPosts = propPosts || POSTS;
   const [month, setMonth] = useState(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1));
 
   const postsByDay = useMemo(() => {
     const m = {};
-    POSTS.forEach(p => {
+    allPosts.forEach(p => {
       const k = p.when.toDateString();
       (m[k] = m[k] || []).push(p);
     });
     Object.values(m).forEach(arr => arr.sort((a, b) => a.when - b.when));
     return m;
-  }, []);
+  }, [allPosts]);
 
   // build month grid (Sunday-first)
   const cells = useMemo(() => {

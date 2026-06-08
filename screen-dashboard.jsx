@@ -1,18 +1,19 @@
 /* ============================================================
    VideoUp — Dashboard screen
    ============================================================ */
-function Dashboard({ go, openCreate, openPost }) {
+function Dashboard({ go, openCreate, openPost, posts: propPosts }) {
   const stats = platformStats();
+  const allPosts = propPosts || POSTS;
   const now = TODAY;
   const in24 = new Date(now); in24.setHours(now.getHours() + 24);
 
-  const scheduledPosts = POSTS.filter(p => ["scheduled", "publishing"].includes(postStatus(p)));
+  const scheduledPosts = allPosts.filter(p => ["scheduled", "publishing"].includes(postStatus(p)));
   const upcoming = scheduledPosts.filter(p => p.when >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))
     .sort((a, b) => a.when - b.when);
   const next24 = scheduledPosts.filter(p => p.when >= now && p.when <= in24);
 
   let publishedToday = 0, failedTotal = 0;
-  POSTS.forEach(p => Object.entries(p.platforms).forEach(([k, st]) => {
+  allPosts.forEach(p => Object.entries(p.platforms).forEach(([k, st]) => {
     if (st === "published" && sameDay(p.when, now)) publishedToday++;
     if (st === "failed") failedTotal++;
   }));
@@ -26,7 +27,7 @@ function Dashboard({ go, openCreate, openPost }) {
 
   // activity feed (recent published / failed / publishing)
   const activity = [];
-  POSTS.forEach(p => Object.entries(p.platforms).forEach(([k, st]) => {
+  allPosts.forEach(p => Object.entries(p.platforms).forEach(([k, st]) => {
     if (["published", "failed", "publishing"].includes(st))
       activity.push({ post: p, plat: k, st, when: p.when });
   }));
