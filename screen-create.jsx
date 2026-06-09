@@ -25,13 +25,29 @@ const PLATFORM_FIELDS = {
   lazada:   { caption: { label: "คำบรรยายสินค้า", required: true, max: 2000 }, hashtags: false, link: true },
 };
 
-function CreatePost({ initialVid, initialDate, videos: propVideos, sources: propSources, connectedPlatforms, products, onToast, onReload, onPublish, onCancel }) {
+function CreatePost({ initialVid, initialDate, initialPlatforms, initialContent, initialMode, initialTime, editPostId, videos: propVideos, sources: propSources, connectedPlatforms, products, onToast, onReload, onPublish, onCancel }) {
   // ใช้ videos จริงจาก Supabase ถ้ามี (live mode) ไม่งั้น fallback mock
   const allVideos = (propVideos && propVideos.length >= 0) ? propVideos : VIDEOS;
-  const findVid = (id) => allVideos.find(v => v.id === id) || VID(id);
   const live = window.API && window.API.isLive();
   const fileRef = useRef(null);
+  const localRef = useRef(null);
   const [uploading, setUploading] = useState(false);
+
+  // ไฟล์จากเครื่อง (เลือกแล้วโพสต์ได้เลย ไม่เก็บ cloud ถ้าโพสต์ทันที)
+  const [localFile, setLocalFile] = useState(null);
+  const [localUrl, setLocalUrl] = useState(null);
+  const localVideo = localFile ? {
+    id: "__local__", title: localFile.name.replace(/\.[^.]+$/, ""),
+    dur: 0, cover: "linear-gradient(135deg,#FF6A3D,#FF2E76)", source: "url", local: true,
+  } : null;
+  const findVid = (id) => (id === "__local__" ? localVideo : null) || allVideos.find(v => v.id === id) || VID(id);
+  const pickLocal = (e) => {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    if (localUrl) URL.revokeObjectURL(localUrl);
+    setLocalFile(file); setLocalUrl(URL.createObjectURL(file)); setVid("__local__");
+    onToast?.({ kind: "publishing", title: "เลือกไฟล์จากเครื่องแล้ว ✓", desc: file.name });
+  };
 
   // source/platform ที่ใช้ได้จริง (เฉพาะที่เชื่อมต่อแล้ว)
   const connectedSourceTypes = new Set((propSources || []).map(s => s.type));
@@ -87,24 +103,25 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
   // source filter — default = source ของคลิปที่เลือก หรือ source แรกที่เชื่อมต่อ
   const [activeSource, setActiveSource] = useState(() =>
     (initialVid && findVid(initialVid)?.source) || availSources.find(s => s !== "url") || availSources[0] || "url");
-  // platform — เปิดเฉพาะที่เชื่อมต่อแล้ว (default เปิดทั้งหมดที่ใช้ได้)
+  // platform — แก้ไขโพสต์ใช้ของเดิม / ไม่งั้นเปิดทั้งหมดที่เชื่อมต่อ
   const [plats, setPlats] = useState(() => {
     const init = {};
-    availPlatforms.forEach(k => { init[k] = true; });
+    if (initialPlatforms && initialPlatforms.length) initialPlatforms.forEach(k => { init[k] = true; });
+    else availPlatforms.forEach(k => { init[k] = true; });
     return init;
   });
   const [content, setContent] = useState(() => {
     const c = {};
-    PLATFORM_LIST.forEach(k => c[k] = { title: "", ...CONTENT_TPL[k] });
+    PLATFORM_LIST.forEach(k => c[k] = { title: "", ...CONTENT_TPL[k], ...(initialContent?.[k] || {}) });
     return c;
   });
-  const [tab, setTab] = useState(availPlatforms[0] || "youtube");
-  const [mode, setMode] = useState("later"); // now | later
+  const [tab, setTab] = useState((initialPlatforms && initialPlatforms[0]) || availPlatforms[0] || "youtube");
+  const [mode, setMode] = useState(initialMode || "later"); // now | later
   const [date, setDate] = useState(() => {
     const d = initialDate || new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() + 1);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
-  const [time, setTime] = useState("19:00");
+  const [time, setTime] = useState(initialTime || "19:00");
   // post-publish cleanup
   const [cleanup, setCleanup] = useState(false);
   const [cleanupDelay, setCleanupDelay] = useState("immediate"); // immediate | 24h | 7d
@@ -178,6 +195,8 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
         content,            // เนื้อหาต่อแพลตฟอร์ม (caption/hashtags/link)
         cleanup, cleanupDelay,
         source: v.source,
+        editPostId,         // ถ้าแก้ไขโพสต์เดิม
+        localFile,          // ถ้าเลือกไฟล์จากเครื่อง (โพสต์ทันทีไม่เก็บ cloud)
       });
     } finally { setPublishing(false); }
   };
@@ -231,11 +250,25 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
                 <div style={{ width: 90, marginTop: 4 }}><Bar value={src.used} max={src.total} color={src.color} height={4} /></div>
               </div>
             )}
-            <input ref={fileRef} type="file" accept="video/*" style={{ display: "none" }} onChange={doUpload} />
-            <Btn size="sm" variant="primary" icon="upload" disabled={uploading} onClick={() => fileRef.current?.click()}>
-              {uploading ? "กำลังอัปโหลด..." : "เลือกจากเครื่อง"}
+            <input ref={fileRef} type="file" accept="video/*" style={{ display: "none" }} onChange={pickLocal} />
+            <Btn size="sm" variant="primary" icon="upload" onClick={() => fileRef.current?.click()}>
+              เลือกจากเครื่อง
             </Btn>
           </div>
+
+          {/* ไฟล์จากเครื่องที่เลือก */}
+          {localFile && (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", border: "1.5px solid var(--brand)", borderRadius: 12, background: "var(--brand-soft)", marginBottom: 12 }}>
+              <div style={{ width: 40, height: 50, borderRadius: 8, overflow: "hidden", flex: "none", background: "#000" }}>
+                {localUrl && <video src={localUrl} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 13.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{localFile.name}</div>
+                <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>ไฟล์จากเครื่อง · {Math.round(localFile.size / 1048576)} MB · โพสต์ทันทีไม่เก็บ Cloud / ตั้งเวลาจะอัปขึ้น Cloud ให้</div>
+              </div>
+              <Btn size="sm" variant="ghost" icon="x" onClick={() => { if (localUrl) URL.revokeObjectURL(localUrl); setLocalFile(null); setLocalUrl(null); setVid(null); }}>เอาออก</Btn>
+            </div>
+          )}
 
           {/* VIDEO GRID */}
           {filtered.length === 0 ? (
@@ -515,13 +548,15 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
       <div className="preview-col">
         <div className="phone">
           <div className="phone-screen">
-            <div className="phone-video" style={
-              v
-                ? (/^https?:\/\//.test(v.cover)
-                    ? { backgroundImage: `url(${v.cover})`, backgroundSize: "cover", backgroundPosition: "center" }
-                    : { background: v.cover })
-                : { background: "linear-gradient(135deg,#2a2a33,#15151b)" }
-            } />
+            {v && v.local && localUrl
+              ? <video className="phone-video" src={localUrl} muted loop autoPlay playsInline style={{ objectFit: "cover" }} />
+              : <div className="phone-video" style={
+                  v
+                    ? (/^https?:\/\//.test(v.cover)
+                        ? { backgroundImage: `url(${v.cover})`, backgroundSize: "cover", backgroundPosition: "center" }
+                        : { background: v.cover })
+                    : { background: "linear-gradient(135deg,#2a2a33,#15151b)" }
+                } />}
             {!v && (
               <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "rgba(255,255,255,.6)", textAlign: "center", padding: 20 }}>
                 <div><Icon name="film" size={30} /><div style={{ fontSize: 13, fontWeight: 600, marginTop: 8 }}>เลือกวิดีโอเพื่อดูตัวอย่าง</div></div>

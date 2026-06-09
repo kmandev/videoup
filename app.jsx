@@ -142,6 +142,17 @@ function App() {
     })();
   }, []);
 
+  // Realtime — อัปเดตโพสต์อัตโนมัติเมื่อสถานะเปลี่ยน (เช่น scheduler โพสต์เสร็จ)
+  useEffect(() => {
+    if (!window.API || !window.API.isLive()) return;
+    let timer = null;
+    const sub = window.API.subscribePosts(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => { reloadLibrary(); }, 800); // debounce
+    });
+    return () => { clearTimeout(timer); sub.unsubscribe(); };
+  }, []);
+
   const logout = async () => {
     try { if (window.API) await window.API.auth.signOut(); } catch (e) {}
     localStorage.removeItem("videoup_user");
@@ -217,11 +228,33 @@ function App() {
 
     // Live mode — บันทึกลง DB จริง
     try {
+      // ถ้าแก้ไขโพสต์เดิม → ลบของเก่าก่อน (สร้างใหม่แทน)
+      if (payload.editPostId) { try { await window.API.deletePost(payload.editPostId); } catch (_) {} }
+
+      // ── กรณีไฟล์จากเครื่อง ──
+      if (payload.localFile) {
+        if (payload.mode === "now") {
+          // โพสต์ทันที — ส่งไฟล์ตรงขึ้นแพลตฟอร์ม ไม่เก็บ cloud
+          pushToast({ kind: "publishing", title: "กำลังอัปโหลดไฟล์ขึ้นแพลตฟอร์ม... 🚀", desc: payload.title });
+          go("dashboard");
+          const r = await window.API.publishLocal(payload.localFile, { title: payload.title, platforms: payload.platforms, content: payload.content });
+          const ok = r.status === "published";
+          pushToast({ kind: ok ? "publishing" : "scheduled", title: ok ? "โพสต์สำเร็จ ✓" : r.status === "partial" ? "โพสต์บางส่วนสำเร็จ" : "โพสต์ไม่สำเร็จ", desc: ok ? `${payload.title} ขึ้นแพลตฟอร์มแล้ว` : "ดูรายละเอียดใน Dashboard" });
+          await reloadLibrary();
+          return;
+        }
+        // ตั้งเวลา — ต้องอัปไฟล์ขึ้น cloud ก่อน เพื่อให้ระบบดึงไปโพสต์ตอนถึงเวลา
+        const srcRow = (liveSources || []).find(s => s.type !== "url" && s.id);
+        if (!srcRow) { pushToast({ kind: "scheduled", title: "ตั้งเวลาไม่ได้", desc: "ต้องเชื่อม Cloud (Drive/Dropbox/OneDrive) ก่อน เพื่อเก็บไฟล์ไว้โพสต์ตามเวลา" }); return; }
+        pushToast({ kind: "publishing", title: "กำลังอัปไฟล์ขึ้น Cloud เพื่อตั้งเวลา...", desc: payload.title });
+        const uploaded = await window.API.uploadToSource(srcRow.id, payload.localFile);
+        payload.vid = uploaded.id; // ใช้ video ที่เพิ่งอัป
+      }
+
       const post = await window.API.createPost(payload);
       if (payload.mode === "now") {
         pushToast({ kind: "publishing", title: "กำลังอัปโหลดขึ้นแพลตฟอร์ม... 🚀", desc: `${payload.title} · ${payload.platforms.length} แพลตฟอร์ม` });
         go("dashboard");
-        // เรียก Edge Function โพสต์จริงทันที
         const r = await window.API.publishPost(post.id);
         const ok = r.status === "published";
         pushToast({
@@ -232,6 +265,7 @@ function App() {
         await reloadLibrary();
       } else {
         pushToast({ kind: "scheduled", title: "ตั้งเวลาเรียบร้อย ✓", desc: `${payload.title} · ${payload.when}${cleanupTxt}` });
+        await reloadLibrary();
         go("calendar");
       }
     } catch (e) {
@@ -258,7 +292,10 @@ function App() {
   else if (route === "products") screen = <ProductsScreen onToast={pushToast} />;
   else if (route === "billing")  screen = <Billing currentPlan={plan} onChangePlan={requestPlan} onToast={pushToast} />;
   else if (route === "settings") screen = <Settings onToast={pushToast} user={user} />;
-  else screen = <CreatePost initialVid={createSeed.vid} initialDate={createSeed.date}
+  else screen = <CreatePost key={createSeed.editPostId || createSeed.vid || "new"}
+                   initialVid={createSeed.vid} initialDate={createSeed.date}
+                   initialPlatforms={createSeed.platforms} initialContent={createSeed.content}
+                   initialMode={createSeed.mode} initialTime={createSeed.time} editPostId={createSeed.editPostId}
                    videos={videos} sources={sources} connectedPlatforms={connectedPlatforms}
                    products={liveProducts !== null ? liveProducts : []}
                    onToast={pushToast} onReload={reloadLibrary}
@@ -402,7 +439,25 @@ function App() {
 
       {/* post detail modal */}
       {detail && <PostDetail post={detail} onClose={() => setDetail(null)}
-        onEdit={() => { setDetail(null); setCreateSeed({ vid: detail.vid }); go("create"); }}
+        onEdit={async () => {
+          const post = detail; setDetail(null);
+          // โหลดเนื้อหาเดิมรายแพลตฟอร์มมาเติมในหน้าสร้างโพสต์
+          let content = {}, platforms = Object.keys(post.platforms || {});
+          if (window.API?.isLive() && post.id) {
+            try {
+              const rows = await window.API.getPostPlatforms(post.id);
+              platforms = rows.map(r => r.platform);
+              rows.forEach(r => content[r.platform] = { title: r.title || "", caption: r.caption || "", hashtags: r.hashtags || "", link: r.affiliate_link || "" });
+            } catch (e) {}
+          }
+          const when = post.when instanceof Date ? post.when : new Date(post.scheduled_at || Date.now());
+          setCreateSeed({
+            vid: post.video_id || post.vid, date: when,
+            platforms, content, editPostId: post.id, mode: post.mode || "later",
+            time: `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`,
+          });
+          go("create");
+        }}
         onToast={pushToast} />}
 
       {/* upgrade / change plan modal */}

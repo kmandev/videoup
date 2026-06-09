@@ -229,6 +229,24 @@
       return post;
     },
 
+    // โพสต์ไฟล์จากเครื่องโดยตรง (ไม่เก็บบนคลาวด์) → อัปขึ้นแพลตฟอร์มทันที
+    async publishLocal(file, payload) {
+      if (!window.sb) demo();
+      const { data: { session } } = await window.sb.auth.getSession();
+      if (!session) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('payload', JSON.stringify(payload));
+      const res = await fetch(`${window.SUPABASE_URL}/functions/v1/publish-local`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: fd,
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'โพสต์ไม่สำเร็จ');
+      return j;
+    },
+
     // โพสต์จริงทันที (เรียก Edge Function publish-post) → อัปขึ้นแพลตฟอร์มเลย
     async publishPost(postId) {
       if (!window.sb) demo();
