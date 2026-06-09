@@ -250,35 +250,36 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
           )}
 
           {/* PRODUCT PICKER — เลือก/ค้นหาสินค้าเพื่อเติมเนื้อหา */}
-          {vid && products && products.length > 0 && (
-            <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <Icon name="cart" size={15} style={{ color: "var(--brand)" }} />
-                <span style={{ fontWeight: 800, fontSize: 13.5 }}>เลือกสินค้า</span>
-                <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>เติมเนื้อหา + ลิงก์อัตโนมัติ (แก้ต่อได้)</span>
-                {selectedProduct && <Btn size="sm" variant="ghost" icon="x" style={{ marginLeft: "auto" }} onClick={() => applyProduct("")}>ล้าง</Btn>}
-              </div>
-              <input className="input" value={prodSearch} placeholder="🔍 ค้นหาสินค้า..."
-                style={{ marginBottom: 10 }} onChange={e => setProdSearch(e.target.value)} />
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {filteredProducts.length === 0
-                  ? <span className="muted" style={{ fontSize: 12.5, fontWeight: 600 }}>ไม่พบสินค้า</span>
-                  : filteredProducts.map(p => (
-                    <button key={p.id} className={`chip ${productId === p.id ? "on" : ""}`}
-                      style={productId === p.id ? { background: "var(--brand)" } : {}}
-                      onClick={() => applyProduct(p.id)}>
-                      <Icon name="cart" size={13} />{p.name}
-                      {productId === p.id && <Icon name="check" size={14} />}
-                    </button>
-                  ))}
-              </div>
+          <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <Icon name="cart" size={15} style={{ color: "var(--brand)" }} />
+              <span style={{ fontWeight: 800, fontSize: 13.5 }}>เลือกสินค้า</span>
+              <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>เติมเนื้อหา + ลิงก์อัตโนมัติ (แก้ต่อได้)</span>
+              {selectedProduct && <Btn size="sm" variant="ghost" icon="x" style={{ marginLeft: "auto" }} onClick={() => applyProduct("")}>ล้าง</Btn>}
             </div>
-          )}
-          {vid && (!products || products.length === 0) && (
-            <div style={{ marginTop: 14, fontSize: 12.5, fontWeight: 600 }} className="muted">
-              💡 เพิ่มสินค้าในเมนู "สินค้า" เพื่อเลือกมาเติมเนื้อหาได้อัตโนมัติ
-            </div>
-          )}
+            {products && products.length > 0 ? (
+              <>
+                <input className="input" value={prodSearch} placeholder="🔍 ค้นหาสินค้า..."
+                  style={{ marginBottom: 10 }} onChange={e => setProdSearch(e.target.value)} />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {filteredProducts.length === 0
+                    ? <span className="muted" style={{ fontSize: 12.5, fontWeight: 600 }}>ไม่พบสินค้า</span>
+                    : filteredProducts.map(p => (
+                      <button key={p.id} className={`chip ${productId === p.id ? "on" : ""}`}
+                        style={productId === p.id ? { background: "var(--brand)" } : {}}
+                        onClick={() => applyProduct(p.id)}>
+                        <Icon name="cart" size={13} />{p.name}
+                        {productId === p.id && <Icon name="check" size={14} />}
+                      </button>
+                    ))}
+                </div>
+              </>
+            ) : (
+              <div className="muted" style={{ fontSize: 12.5, fontWeight: 600, border: "1px dashed var(--border-2)", borderRadius: 10, padding: "12px 14px" }}>
+                💡 ยังไม่มีสินค้า — ไปที่เมนู <b>"สินค้า"</b> เพื่อเพิ่มสินค้า แล้วกลับมาเลือกได้ที่นี่
+              </div>
+            )}
+          </div>
         </div>
 
         {/* STEP 2 — platforms */}
