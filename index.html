@@ -17,9 +17,9 @@
     const hasMock = (() => { try { return !!JSON.parse(localStorage.getItem('videoup_user')); } catch { return false; } })();
     if (window.sb) {
       const { data } = await window.sb.auth.getSession();
-      if (!data.session && !hasMock) window.location.replace('auth.html');
+      if (!data.session && !hasMock) window.location.replace('landing.html');
     } else if (!hasMock) {
-      window.location.replace('auth.html');
+      window.location.replace('landing.html');
     }
   })();
 </script>

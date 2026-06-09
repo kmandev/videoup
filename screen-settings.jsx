@@ -40,7 +40,7 @@ function Settings({ onToast, user }) {
         {tab === "profile"       && <ProfileSection onSave={() => save("profile")} saved={saved.profile} user={user} onToast={onToast} />}
         {tab === "platforms"     && <PlatformsSection onSave={() => save("platforms")} saved={saved.platforms} onToast={onToast} />}
         {tab === "sources"       && <SourcesSection onSave={() => save("sources")} saved={saved.sources} onToast={onToast} />}
-        {tab === "notifications" && <NotifSection onSave={() => save("notifications")} saved={saved.notifications} />}
+        {tab === "notifications" && <NotifSection onToast={onToast} />}
         {tab === "defaults"      && <DefaultsSection onSave={() => save("defaults")} saved={saved.defaults} />}
       </div>
     </div>
@@ -385,41 +385,80 @@ function SourcesSection({ onSave, saved, onToast }) {
 /* ============================================================
    NOTIFICATIONS
    ============================================================ */
-function NotifSection({ onSave, saved }) {
-  const [cfg, setCfg] = useState({ ...MOCK_NOTIF });
+function NotifSection({ onToast }) {
+  const live = window.API && window.API.isLive();
+  const [cfg, setCfg] = useState({ ...MOCK_NOTIF, telegramOn: false, telegramChatId: "" });
+  const [saved, setSaved] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  // โหลดค่าจริงจาก DB
+  useEffect(() => {
+    if (!live) return;
+    (async () => {
+      try {
+        const s = await window.API.getSettings();
+        if (s) setCfg(c => ({ ...c,
+          notifyOnSuccess: s.notify_success, notifyOnFail: s.notify_fail, notifyOnQueue: s.notify_queue,
+          emailOn: s.email_on, lineOn: s.line_on, lineToken: s.line_token || "",
+          webhookOn: s.webhook_on, webhookUrl: s.webhook_url || "",
+          telegramOn: s.telegram_on || false, telegramChatId: s.telegram_chat_id || "",
+        }));
+      } catch (e) {}
+    })();
+  }, []);
+
+  const save = async () => {
+    if (live) {
+      try {
+        await window.API.saveSettings({
+          notify_success: cfg.notifyOnSuccess, notify_fail: cfg.notifyOnFail, notify_queue: cfg.notifyOnQueue,
+          email_on: cfg.emailOn, line_on: cfg.lineOn, line_token: cfg.lineToken,
+          webhook_on: cfg.webhookOn, webhook_url: cfg.webhookUrl,
+          telegram_on: cfg.telegramOn, telegram_chat_id: cfg.telegramChatId,
+        });
+      } catch (e) { onToast?.({ kind: "scheduled", title: "บันทึกไม่สำเร็จ", desc: e.message }); return; }
+    }
+    setSaved(true); setTimeout(() => setSaved(false), 2000);
+    onToast?.({ kind: "publishing", title: "บันทึกการแจ้งเตือนแล้ว ✓" });
+  };
+
+  const testTelegram = async () => {
+    if (!cfg.telegramChatId) { onToast?.({ kind: "scheduled", title: "ใส่ Chat ID ก่อน" }); return; }
+    if (!live) { onToast?.({ kind: "publishing", title: "ส่งทดสอบแล้ว (demo)" }); return; }
+    setTesting(true);
+    try {
+      await window.API.testTelegram(cfg.telegramChatId);
+      onToast?.({ kind: "publishing", title: "ส่งข้อความทดสอบแล้ว ✓", desc: "เช็คใน Telegram ของคุณ" });
+    } catch (e) { onToast?.({ kind: "scheduled", title: "ส่งไม่สำเร็จ", desc: e.message }); }
+    finally { setTesting(false); }
+  };
 
   return (
     <>
-      <SettingCard title="การแจ้งเตือน" desc="รับแจ้งเตือนเมื่อโพสต์สำเร็จ ล้มเหลว หรือคิวเต็ม" onSave={onSave} saved={saved}>
+      <SettingCard title="การแจ้งเตือน" desc="รับแจ้งเตือนเมื่อโพสต์สำเร็จ ล้มเหลว หรือคิวเต็ม" onSave={save} saved={saved}>
         <Toggle2 value={cfg.notifyOnSuccess} onChange={v => setCfg(c => ({ ...c, notifyOnSuccess: v }))} label="โพสต์สำเร็จ" desc="แจ้งทุกครั้งที่อัปโหลดขึ้นแพลตฟอร์มสำเร็จ" />
         <Toggle2 value={cfg.notifyOnFail}    onChange={v => setCfg(c => ({ ...c, notifyOnFail: v }))}    label="อัปโหลดล้มเหลว" desc="แจ้งทันทีเมื่อ retry หมดครั้งหรือ token หมดอายุ" />
         <Toggle2 value={cfg.notifyOnQueue}   onChange={v => setCfg(c => ({ ...c, notifyOnQueue: v }))}   label="คิวใกล้เต็ม" desc="แจ้งเมื่อคิวเหลือน้อยกว่า 2 ช่อง" />
       </SettingCard>
 
-      <SettingCard title="Line Notify" desc="ส่งข้อความแจ้งเตือนเข้า Line ของคุณ" onSave={onSave} saved={saved}>
-        <Toggle2 value={cfg.lineOn} onChange={v => setCfg(c => ({ ...c, lineOn: v }))} label="เปิดใช้ Line Notify" desc="ต้องมี Line Notify Token" />
-        <FieldRow label="Line Notify Token" hint="ได้จาก notify-bot.line.me">
+      <SettingCard title="Telegram" desc="ส่งแจ้งเตือนเข้า Telegram (แนะนำ — ฟรีและเรียลไทม์)" onSave={save} saved={saved}>
+        <Toggle2 value={cfg.telegramOn} onChange={v => setCfg(c => ({ ...c, telegramOn: v }))} label="เปิดใช้ Telegram" desc="แจ้งผลการโพสต์ + ลิงก์คลิปทันที" />
+        <FieldRow label="Telegram Chat ID" hint="ทักบอท @VideoUpBot แล้วพิมพ์ /start — หรือดู ID จาก @userinfobot">
           <div style={{ display: "flex", gap: 8 }}>
-            <input className="input mono" value={cfg.lineToken} onChange={e => setCfg(c => ({ ...c, lineToken: e.target.value }))} placeholder="xxxxxxxxxxxxxxxxxxxxxxx" style={{ flex: 1 }} />
-            <Btn size="sm" variant="ghost" icon="send">ทดสอบ</Btn>
+            <input className="input mono" value={cfg.telegramChatId} onChange={e => setCfg(c => ({ ...c, telegramChatId: e.target.value }))} placeholder="เช่น 123456789" style={{ flex: 1 }} />
+            <Btn size="sm" variant="ghost" icon="send" disabled={testing} onClick={testTelegram}>{testing ? "..." : "ทดสอบ"}</Btn>
           </div>
         </FieldRow>
       </SettingCard>
 
-      <SettingCard title="Email" desc="รับสรุปรายวันและแจ้งเตือนสำคัญทางอีเมล" onSave={onSave} saved={saved}>
+      <SettingCard title="Email" desc="รับสรุปรายวันและแจ้งเตือนสำคัญทางอีเมล" onSave={save} saved={saved}>
         <Toggle2 value={cfg.emailOn} onChange={v => setCfg(c => ({ ...c, emailOn: v }))} label="เปิดใช้ Email" desc="ส่งไปที่อีเมลที่ตั้งค่าในโปรไฟล์" />
-        <FieldRow label="อีเมลรับแจ้งเตือน">
-          <input className="input" type="email" value={cfg.email} onChange={e => setCfg(c => ({ ...c, email: e.target.value }))} />
-        </FieldRow>
       </SettingCard>
 
-      <SettingCard title="Webhook" desc="ส่ง HTTP POST ไปยัง URL ที่กำหนด (Zapier, Make, custom API)" onSave={onSave} saved={saved}>
+      <SettingCard title="Webhook" desc="ส่ง HTTP POST ไปยัง URL ที่กำหนด (Zapier, Make, custom API)" onSave={save} saved={saved}>
         <Toggle2 value={cfg.webhookOn} onChange={v => setCfg(c => ({ ...c, webhookOn: v }))} label="เปิดใช้ Webhook" desc="เหมาะสำหรับเชื่อมกับ Zapier, Make, หรือระบบ custom" />
         <FieldRow label="Webhook URL">
-          <div style={{ display: "flex", gap: 8 }}>
-            <input className="input mono" value={cfg.webhookUrl} onChange={e => setCfg(c => ({ ...c, webhookUrl: e.target.value }))} placeholder="https://hooks.zapier.com/..." style={{ flex: 1 }} disabled={!cfg.webhookOn} />
-            <Btn size="sm" variant="ghost" icon="send" disabled={!cfg.webhookOn}>ทดสอบ</Btn>
-          </div>
+          <input className="input mono" value={cfg.webhookUrl} onChange={e => setCfg(c => ({ ...c, webhookUrl: e.target.value }))} placeholder="https://hooks.zapier.com/..." disabled={!cfg.webhookOn} />
         </FieldRow>
       </SettingCard>
     </>

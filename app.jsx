@@ -156,7 +156,7 @@ function App() {
   const logout = async () => {
     try { if (window.API) await window.API.auth.signOut(); } catch (e) {}
     localStorage.removeItem("videoup_user");
-    window.location.href = "auth.html";
+    window.location.href = "landing.html";
   };
 
   const avatarUrl = (user.avatar && /^https?:\/\//.test(user.avatar)) ? user.avatar : null;

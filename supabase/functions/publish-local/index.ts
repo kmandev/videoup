@@ -38,6 +38,21 @@ async function freshPlatformToken(conn: any): Promise<string> {
   return j.access_token;
 }
 
+async function notifyTelegram(userId: string, text: string, kind: "success" | "fail") {
+  const token = Deno.env.get("TELEGRAM_BOT_TOKEN");
+  if (!token) return;
+  const { data: s } = await admin.from("user_settings").select("telegram_on, telegram_chat_id, notify_success, notify_fail").eq("user_id", userId).maybeSingle();
+  if (!s || !s.telegram_on || !s.telegram_chat_id) return;
+  if (kind === "success" && s.notify_success === false) return;
+  if (kind === "fail" && s.notify_fail === false) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: s.telegram_chat_id, text, parse_mode: "HTML", disable_web_page_preview: false }),
+    });
+  } catch (_) { /* ignore */ }
+}
+
 function buildDesc(t: any): string {
   let txt = t.caption || "";
   if (t.hashtags) txt += "\n\n" + t.hashtags;
@@ -130,12 +145,18 @@ Deno.serve(async (req) => {
     }
   }
 
-  const { data: all } = await admin.from("post_platforms").select("status").eq("post_id", post.id);
+  const { data: all } = await admin.from("post_platforms").select("platform, status, external_url, error").eq("post_id", post.id);
   const ss = (all || []).map((x: any) => x.status);
   const agg = ss.every((s: string) => s === "published") ? "published"
             : (ss.some((s: string) => s === "published") && ss.some((s: string) => s === "failed")) ? "partial"
             : ss.some((s: string) => s === "failed") ? "failed" : "publishing";
   await admin.from("posts").update({ status: agg }).eq("id", post.id);
+
+  const lines = (all || []).map((r: any) =>
+    r.status === "published" ? `✅ ${r.platform}: ${r.external_url || "สำเร็จ"}` : `❌ ${r.platform}: ${r.error || "ล้มเหลว"}`);
+  await notifyTelegram(user.id,
+    `${agg === "published" ? "🎉" : agg === "partial" ? "⚠️" : "❌"} <b>${baseTitle}</b>\n${lines.join("\n")}`,
+    agg === "published" ? "success" : "fail");
 
   return json({ postId: post.id, status: agg });
 });

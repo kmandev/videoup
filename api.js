@@ -315,6 +315,20 @@
         .select().single());
     },
 
+    // ส่งข้อความทดสอบ Telegram
+    async testTelegram(chatId) {
+      if (!window.sb) demo();
+      const { data: { session } } = await window.sb.auth.getSession();
+      const res = await fetch(`${window.SUPABASE_URL}/functions/v1/telegram-test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ chatId }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'ส่งไม่สำเร็จ');
+      return j;
+    },
+
     /* ---------- REALTIME (สถานะอัปเดตจาก Pi) ---------- */
     subscribePosts(onChange) {
       if (!window.sb) return { unsubscribe() {} };
