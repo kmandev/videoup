@@ -1,10 +1,29 @@
 /* ============================================================
    VideoUp — Dashboard screen
    ============================================================ */
-function Dashboard({ go, openCreate, openPost, posts: propPosts, connectedPlatforms }) {
-  const stats = platformStats();
+function Dashboard({ go, openCreate, openPost, posts: propPosts, connectedPlatforms, primarySource }) {
   const allPosts = propPosts || POSTS;
   const platList = (connectedPlatforms && connectedPlatforms.length >= 0) ? connectedPlatforms : PLATFORM_LIST;
+
+  // คำนวณสถิติต่อแพลตฟอร์มจากโพสต์จริง
+  const stats = {};
+  PLATFORM_LIST.forEach(id => stats[id] = { published: 0, scheduled: 0, failed: 0 });
+  allPosts.forEach(p => Object.entries(p.platforms || {}).forEach(([k, st]) => {
+    if (!stats[k]) stats[k] = { published: 0, scheduled: 0, failed: 0 };
+    if (st === "published") stats[k].published++;
+    else if (st === "failed") stats[k].failed++;
+    else stats[k].scheduled++;  // scheduled/publishing/draft
+  }));
+
+  // storage card — ใช้ source จริง (ตัวแรกที่เชื่อมต่อ) ถ้ามี
+  const ds = primarySource ? {
+    name:    SOURCES[primarySource.type]?.name || primarySource.name || "Storage",
+    icon:    SOURCES[primarySource.type]?.icon || "drive",
+    folder:  primarySource.path || "—",
+    account: primarySource.account || "",
+    usedGB:  primarySource.used_gb ?? 0,
+    totalGB: primarySource.total_gb ?? 0,
+  } : { name: DRIVE && !window.API?.isLive() ? "Google Drive" : "ยังไม่เชื่อมต่อ", icon: "drive", folder: "—", account: "", usedGB: 0, totalGB: 0 };
   const now = TODAY;
   const in24 = new Date(now); in24.setHours(now.getHours() + 24);
 
@@ -96,7 +115,7 @@ function Dashboard({ go, openCreate, openPost, posts: propPosts, connectedPlatfo
             const ps = postStatus(p);
             return (
               <div key={p.id} className="upcoming-item" style={{ cursor: "pointer" }} onClick={() => openPost(p)}>
-                <div className="thumb"><VideoThumb vid={p.vid} showPlay={false} /></div>
+                <div className="thumb"><VideoThumb vid={p.vid || { dur: p.video_duration || 0, cover: p.video_cover }} showPlay={false} /></div>
                 <div className="meta">
                   <div className="ttl">{p.title}</div>
                   <div className="when">
@@ -123,24 +142,24 @@ function Dashboard({ go, openCreate, openPost, posts: propPosts, connectedPlatfo
           <div className="card card-pad">
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
               <div className="ico" style={{ width: 30, height: 30, borderRadius: 9, background: "var(--warn-bg)", color: "var(--warn)", display: "grid", placeItems: "center" }}>
-                <Icon name="drive" size={15} />
+                <Icon name={ds.icon} size={15} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 14 }}>Google Drive</div>
-                <div className="mono muted" style={{ fontSize: 10.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{DRIVE.folder}</div>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>{ds.name}</div>
+                <div className="mono muted" style={{ fontSize: 10.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ds.folder}</div>
               </div>
-              <span className="badge ok" style={{ marginLeft: "auto" }}><span className="dot" />เชื่อมต่อ</span>
+              {primarySource && <span className="badge ok" style={{ marginLeft: "auto" }}><span className="dot" />เชื่อมต่อ</span>}
             </div>
             <div className="grid" style={{ gap: 13 }}>
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, fontWeight: 600, marginBottom: 5 }}>
-                  <span className="muted">พื้นที่</span><span className="mono">{DRIVE.usedGB} / {DRIVE.totalGB} GB</span>
+                  <span className="muted">พื้นที่</span><span className="mono">{ds.totalGB > 0 ? `${ds.usedGB} / ${ds.totalGB} GB` : "—"}</span>
                 </div>
-                <Bar value={DRIVE.usedGB} max={DRIVE.totalGB} color="var(--warn)" />
+                <Bar value={ds.usedGB} max={ds.totalGB || 1} color="var(--warn)" />
               </div>
               <div style={{ display: "flex", gap: 18, fontSize: 12.5, fontWeight: 600, color: "var(--text-dim)" }}>
-                <span>คลัง <b style={{ color: "var(--text)" }}>{DRIVE.folder}</b></span>
-                <span style={{ marginLeft: "auto" }}>{DRIVE.account}</span>
+                <span>คลัง <b style={{ color: "var(--text)" }}>{ds.folder}</b></span>
+                <span style={{ marginLeft: "auto" }}>{ds.account}</span>
               </div>
             </div>
           </div>

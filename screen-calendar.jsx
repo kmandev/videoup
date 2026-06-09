@@ -116,11 +116,11 @@ function Calendar({ openCreate, openPost, posts: propPosts }) {
                   <div key={p.id} className="list-row" onClick={() => openPost(p)}>
                     <span className="ltime">{fmtTime(p.when)}</span>
                     <div className="thumb" style={{ width: 42, height: 54, borderRadius: 9, overflow: "hidden", flex: "none" }}>
-                      <VideoThumb vid={p.vid} showPlay={false} />
+                      <VideoThumb vid={p.vid || { dur: p.video_duration || 0, cover: p.video_cover }} showPlay={false} />
                     </div>
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ fontWeight: 700, fontSize: 14.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</div>
-                      <div className="muted" style={{ fontSize: 12.5, fontWeight: 600, marginTop: 2 }}>{VID(p.vid).dur} วินาที · {ids.length} แพลตฟอร์ม</div>
+                      <div className="muted" style={{ fontSize: 12.5, fontWeight: 600, marginTop: 2 }}>{(VID(p.vid)?.dur ?? p.video_duration ?? 0)} วินาที · {ids.length} แพลตฟอร์ม</div>
                     </div>
                     <PlatformStack ids={ids} />
                     <StatusBadge status={postStatus(p)} />

@@ -246,7 +246,7 @@ function App() {
   };
 
   let screen;
-  if (route === "dashboard") screen = <Dashboard go={go} openCreate={() => openCreate()} openPost={openPost} posts={posts} connectedPlatforms={connectedPlatforms} />;
+  if (route === "dashboard") screen = <Dashboard go={go} openCreate={() => openCreate()} openPost={openPost} posts={posts} connectedPlatforms={connectedPlatforms} primarySource={(liveSources || []).find(s => s.total_gb > 0) || (liveSources || [])[0]} />;
   else if (route === "calendar") screen = <Calendar openCreate={openCreate} openPost={openPost} posts={posts} />;
   else if (route === "billing")  screen = <Billing currentPlan={plan} onChangePlan={requestPlan} onToast={pushToast} />;
   else if (route === "settings") screen = <Settings onToast={pushToast} user={user} />;
@@ -436,14 +436,20 @@ function App() {
 
 /* ---------- post detail modal ---------- */
 function PostDetail({ post, onClose, onEdit, onToast }) {
-  const v = VID(post.vid);
+  // โพสต์จริงจาก DB ใช้ video_id/video_cover ฯลฯ; mock ใช้ vid
+  const v = VID(post.vid) || {
+    dur: post.video_duration || 0,
+    cover: post.video_cover || COVERS[0],
+    title: post.video_title || post.title,
+    drive: "",
+  };
   const ps = postStatus(post);
   return (
     <div className="scrim2" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
           <div className="thumb" style={{ width: 44, height: 56, borderRadius: 10, overflow: "hidden", flex: "none" }}>
-            <VideoThumb vid={post.vid} showPlay={false} />
+            <VideoThumb vid={post.vid || v} showPlay={false} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 800, fontSize: 16 }}>{post.title}</div>
@@ -456,7 +462,7 @@ function PostDetail({ post, onClose, onEdit, onToast }) {
         <div className="modal-body">
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <StatusBadge status={ps} />
-            <span className="muted mono" style={{ fontSize: 11.5 }}>{v.drive}</span>
+            <span className="muted mono" style={{ fontSize: 11.5 }}>{v.drive || v.title || ""}</span>
           </div>
           <div className="nav-label" style={{ padding: "0 0 8px" }}>สถานะรายแพลตฟอร์ม</div>
           <div className="grid" style={{ gap: 8 }}>
