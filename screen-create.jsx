@@ -97,28 +97,31 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
 
   const setField = (plat, field, val) => setContent(c => ({ ...c, [plat]: { ...c[plat], [field]: val } }));
 
-  // เลือกสินค้า → เติมเนื้อหาทุกแพลตฟอร์มจาก template (ลิงก์ว่าง = ใช้ลิงก์หลักของสินค้า)
+  // เลือกสินค้า → เติมเนื้อหาหลัก (เหมือนกันทุกแพลตฟอร์ม) + ลิงก์แยกตามแพลตฟอร์ม
   const [productId, setProductId] = useState("");
+  const [prodSearch, setProdSearch] = useState("");
   const applyProduct = (id) => {
     setProductId(id);
     if (!id) return;
     const prod = (products || []).find(p => p.id === id);
     if (!prod) return;
+    const m = prod.content || {};
     setContent(c => {
       const n = { ...c };
       PLATFORM_LIST.forEach(k => {
-        const pc = prod.content?.[k] || {};
         n[k] = {
-          title:    pc.title || n[k]?.title || "",
-          caption:  pc.caption ?? n[k]?.caption ?? "",
-          hashtags: pc.hashtags ?? n[k]?.hashtags ?? "",
-          link:     pc.link || prod.affiliate_link || n[k]?.link || "",
+          title:    m.title || n[k]?.title || "",
+          caption:  m.caption ?? n[k]?.caption ?? "",
+          hashtags: m.hashtags ?? n[k]?.hashtags ?? "",
+          link:     m.links?.[k] || prod.affiliate_link || "",
         };
       });
       return n;
     });
     onToast?.({ kind: "publishing", title: "เติมเนื้อหาจากสินค้าแล้ว ✓", desc: prod.name });
   };
+  const filteredProducts = (products || []).filter(p => p.name.toLowerCase().includes(prodSearch.toLowerCase()));
+  const selectedProduct = (products || []).find(p => p.id === productId);
   const applyToAll = () => {
     const src = content[tab];
     setContent(c => {
@@ -245,6 +248,37 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
               })}
             </div>
           )}
+
+          {/* PRODUCT PICKER — เลือก/ค้นหาสินค้าเพื่อเติมเนื้อหา */}
+          {vid && products && products.length > 0 && (
+            <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <Icon name="cart" size={15} style={{ color: "var(--brand)" }} />
+                <span style={{ fontWeight: 800, fontSize: 13.5 }}>เลือกสินค้า</span>
+                <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>เติมเนื้อหา + ลิงก์อัตโนมัติ (แก้ต่อได้)</span>
+                {selectedProduct && <Btn size="sm" variant="ghost" icon="x" style={{ marginLeft: "auto" }} onClick={() => applyProduct("")}>ล้าง</Btn>}
+              </div>
+              <input className="input" value={prodSearch} placeholder="🔍 ค้นหาสินค้า..."
+                style={{ marginBottom: 10 }} onChange={e => setProdSearch(e.target.value)} />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {filteredProducts.length === 0
+                  ? <span className="muted" style={{ fontSize: 12.5, fontWeight: 600 }}>ไม่พบสินค้า</span>
+                  : filteredProducts.map(p => (
+                    <button key={p.id} className={`chip ${productId === p.id ? "on" : ""}`}
+                      style={productId === p.id ? { background: "var(--brand)" } : {}}
+                      onClick={() => applyProduct(p.id)}>
+                      <Icon name="cart" size={13} />{p.name}
+                      {productId === p.id && <Icon name="check" size={14} />}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+          {vid && (!products || products.length === 0) && (
+            <div style={{ marginTop: 14, fontSize: 12.5, fontWeight: 600 }} className="muted">
+              💡 เพิ่มสินค้าในเมนู "สินค้า" เพื่อเลือกมาเติมเนื้อหาได้อัตโนมัติ
+            </div>
+          )}
         </div>
 
         {/* STEP 2 — platforms */}
@@ -289,17 +323,6 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
             <div className="muted" style={{ padding: "24px 0", textAlign: "center", fontWeight: 600 }}>เลือกแพลตฟอร์มอย่างน้อย 1 อันก่อน</div>
           ) : (
             <>
-              {/* เลือกสินค้า → เติมเนื้อหาอัตโนมัติ */}
-              {products && products.length > 0 && (
-                <div className="field">
-                  <label><Icon name="cart" size={14} />เลือกสินค้า <span className="opt">(เติมเนื้อหาอัตโนมัติ แก้ไขต่อได้)</span></label>
-                  <select className="input" value={productId} onChange={e => applyProduct(e.target.value)}>
-                    <option value="">— ไม่เลือก / เขียนเอง —</option>
-                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
-              )}
-
               <div className="plat-tabs">
                 {selectedPlats.map(id => (
                   <button key={id} className={`plat-tab ${tab === id ? "on" : ""}`} onClick={() => setTab(id)}

@@ -249,6 +249,12 @@
       ok(await window.sb.from('posts').delete().eq('id', id));
     },
 
+    // ดึงสถานะ + ลิงก์โพสต์รายแพลตฟอร์ม (external_url, error)
+    async getPostPlatforms(postId) {
+      if (!window.sb) demo();
+      return ok(await window.sb.from('post_platforms').select('*').eq('post_id', postId));
+    },
+
     async retryPlatform(postId, platform) {
       if (!window.sb) demo();
       ok(await window.sb.from('post_platforms')

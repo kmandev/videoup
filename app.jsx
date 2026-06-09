@@ -453,6 +453,19 @@ function PostDetail({ post, onClose, onEdit, onToast }) {
     drive: "",
   };
   const ps = postStatus(post);
+
+  // โหลดรายละเอียดรายแพลตฟอร์ม (ลิงก์โพสต์ + error) ใน live mode
+  const [detail, setDetail] = useState({}); // platform → { external_url, error, status }
+  useEffect(() => {
+    if (!window.API || !window.API.isLive() || !post.id) return;
+    (async () => {
+      try {
+        const rows = await window.API.getPostPlatforms(post.id);
+        const m = {}; (rows || []).forEach(r => { m[r.platform] = r; });
+        setDetail(m);
+      } catch (e) { /* ignore */ }
+    })();
+  }, [post.id]);
   return (
     <div className="scrim2" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
@@ -475,17 +488,35 @@ function PostDetail({ post, onClose, onEdit, onToast }) {
           </div>
           <div className="nav-label" style={{ padding: "0 0 8px" }}>สถานะรายแพลตฟอร์ม</div>
           <div className="grid" style={{ gap: 8 }}>
-            {Object.entries(post.platforms).map(([k, st]) => (
-              <div key={k} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 11px", border: "1px solid var(--border)", borderRadius: 11 }}>
-                <PlatformBadge id={k} size="sm" status={st} />
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{PLATFORMS[k].name}</span>
-                <span style={{ marginLeft: "auto" }}>
-                  {st === "failed"
-                    ? <button className="btn sm subtle" style={{ color: "var(--err)" }} onClick={() => onToast({ kind: "publishing", title: "กำลังลองใหม่", desc: `${PLATFORMS[k].name} · ${post.title}` })}><Icon name="refresh" size={14} />ลองใหม่</button>
-                    : <StatusBadge status={st} />}
-                </span>
+            {Object.entries(post.platforms).map(([k, st]) => {
+              const d = detail[k] || {};
+              return (
+              <div key={k} style={{ border: "1px solid var(--border)", borderRadius: 11, padding: "9px 11px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                  <PlatformBadge id={k} size="sm" status={st} />
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>{PLATFORMS[k].name}</span>
+                  <span style={{ marginLeft: "auto" }}>
+                    {st === "failed"
+                      ? <button className="btn sm subtle" style={{ color: "var(--err)" }} onClick={() => onToast({ kind: "publishing", title: "กำลังลองใหม่", desc: `${PLATFORMS[k].name} · ${post.title}` })}><Icon name="refresh" size={14} />ลองใหม่</button>
+                      : <StatusBadge status={st} />}
+                  </span>
+                </div>
+                {/* ลิงก์โพสต์จริง (หลังโพสต์สำเร็จ) */}
+                {d.external_url && (
+                  <a href={d.external_url} target="_blank" rel="noopener noreferrer"
+                    style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12.5, fontWeight: 700, color: "var(--brand)", textDecoration: "none", wordBreak: "break-all" }}>
+                    <Icon name="link" size={13} style={{ flex: "none" }} />{d.external_url}
+                  </a>
+                )}
+                {/* ข้อความ error (ถ้ามี) */}
+                {d.error && (
+                  <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 600, color: st === "failed" ? "var(--err)" : "var(--warn)", display: "flex", alignItems: "flex-start", gap: 6 }}>
+                    <Icon name="alert" size={13} style={{ flex: "none", marginTop: 1 }} />{d.error}
+                  </div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
         <div className="modal-foot">
