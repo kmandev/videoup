@@ -11,6 +11,20 @@ const PLATFORMS = {
 };
 const PLATFORM_LIST = ["tiktok", "youtube", "facebook", "shopee", "lazada"];
 
+// นามสกุลไฟล์ที่แต่ละแพลตฟอร์มรองรับ (วิดีโอสั้น)
+const PLATFORM_FORMATS = {
+  tiktok:   ["mp4", "mov", "webm"],
+  youtube:  ["mp4", "mov", "webm", "avi", "mpeg4", "3gp"],
+  facebook: ["mp4", "mov"],
+  shopee:   ["mp4"],
+  lazada:   ["mp4"],
+};
+const SAFE_FORMAT = "mp4"; // mp4 (H.264/AAC) รองรับทุกแพลตฟอร์ม
+const fileExt = (name) => (name || "").split(".").pop().toLowerCase();
+// คืน list แพลตฟอร์มที่ "ไม่รองรับ" นามสกุลนี้ (จากที่เลือกไว้)
+const incompatiblePlatforms = (ext, platforms) =>
+  (platforms || []).filter(p => !(PLATFORM_FORMATS[p] || []).includes(ext));
+
 /* video sources — not just Google Drive */
 const SOURCES = {
   gdrive:   { id: "gdrive",   name: "Google Drive", short: "Drive",    color: "#1A73E8", icon: "gdrive",   account: "viralshop.media@gmail.com", path: "/VideoUp/clips",     used: 86, total: 200 },

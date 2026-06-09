@@ -53,6 +53,19 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    // ตรวจนามสกุลไฟล์ก่อนอัป
+    const ext = fileExt(file.name);
+    const KNOWN = ["mp4", "mov", "webm", "avi", "mkv", "m4v", "3gp", "mpeg4"];
+    if (!KNOWN.includes(ext)) {
+      onToast?.({ kind: "scheduled", title: "ไฟล์ไม่รองรับ", desc: `.${ext} ไม่ใช่ไฟล์วิดีโอที่รองรับ — ใช้ ${SAFE_FORMAT} จะดีที่สุด` });
+      return;
+    }
+    // เตือนถ้าไม่ใช่ mp4 (บางแพลตฟอร์มเช่น Shopee/Lazada รับเฉพาะ mp4)
+    const bad = incompatiblePlatforms(ext, availPlatforms);
+    if (ext !== SAFE_FORMAT && bad.length > 0) {
+      onToast?.({ kind: "scheduled", title: `.${ext} ใช้ไม่ได้กับบางแพลตฟอร์ม`,
+        desc: `${bad.map(p => PLATFORMS[p].short).join(", ")} รับเฉพาะ mp4 — แนะนำแปลงเป็น .mp4 ก่อน` });
+    }
     if (!live) { onToast?.({ kind: "publishing", title: "อัปโหลดแล้ว (demo)", desc: file.name }); return; }
     // ใช้ source ปัจจุบัน ถ้าเป็น url/ยังไม่เชื่อม → เลือก cloud source แรกที่เชื่อมต่อ
     const row = srcRow(activeSource) || (propSources || []).find(s => s.type !== "url" && s.id);
@@ -324,6 +337,16 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
               );
             })}
           </div>
+          )}
+          {/* ข้อกำหนดนามสกุลไฟล์ต่อแพลตฟอร์ม */}
+          {selectedPlats.length > 0 && (
+            <div style={{ marginTop: 12, fontSize: 11.5, fontWeight: 600, color: "var(--text-dim)", display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "center" }}>
+              <Icon name="film" size={13} style={{ color: "var(--text-mute)" }} />
+              {selectedPlats.map(id => (
+                <span key={id}><b style={{ color: "var(--text)" }}>{PLATFORMS[id].short}:</b> {PLATFORM_FORMATS[id].join(", ")}</span>
+              ))}
+              <span style={{ color: "var(--brand)" }}>· แนะนำ .mp4 (ใช้ได้ทุกที่)</span>
+            </div>
           )}
         </div>
 
