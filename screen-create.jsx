@@ -48,19 +48,24 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
              used: row.used_gb ?? base.used, total: row.total_gb ?? base.total };
   };
 
-  // อัปโหลดไฟล์เข้า source ปัจจุบัน
+  // อัปโหลดไฟล์จากเครื่อง → cloud source → เลือกใช้คลิปนั้นทันที
   const doUpload = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     if (!live) { onToast?.({ kind: "publishing", title: "อัปโหลดแล้ว (demo)", desc: file.name }); return; }
-    const row = srcRow(activeSource);
-    if (!row) { onToast?.({ kind: "scheduled", title: "ยังไม่ได้เชื่อมต่อ source นี้", desc: "เชื่อมต่อก่อนในหน้าตั้งค่า" }); return; }
+    // ใช้ source ปัจจุบัน ถ้าเป็น url/ยังไม่เชื่อม → เลือก cloud source แรกที่เชื่อมต่อ
+    const row = srcRow(activeSource) || (propSources || []).find(s => s.type !== "url" && s.id);
+    if (!row) { onToast?.({ kind: "scheduled", title: "ต้องเชื่อม Cloud ก่อน", desc: "เชื่อม Google Drive/Dropbox/OneDrive ในหน้าตั้งค่าเพื่ออัปโหลดจากเครื่อง" }); return; }
     setUploading(true);
+    onToast?.({ kind: "publishing", title: "กำลังอัปโหลดขึ้น Cloud...", desc: file.name });
     try {
-      await window.API.uploadToSource(row.id, file);
-      onToast?.({ kind: "publishing", title: "อัปโหลดสำเร็จ ✓", desc: file.name });
+      const uploaded = await window.API.uploadToSource(row.id, file);
       await onReload?.();
+      // สลับไป source ที่อัป + เลือกคลิปที่เพิ่งอัปทันที
+      if (row.type) setActiveSource(row.type);
+      if (uploaded?.id) setVid(uploaded.id);
+      onToast?.({ kind: "publishing", title: "อัปโหลดสำเร็จ ✓ เลือกให้แล้ว", desc: file.name });
     } catch (err) {
       onToast?.({ kind: "scheduled", title: "อัปโหลดไม่สำเร็จ", desc: err.message });
     } finally { setUploading(false); }
@@ -214,20 +219,29 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
               </div>
             )}
             <input ref={fileRef} type="file" accept="video/*" style={{ display: "none" }} onChange={doUpload} />
-            <Btn size="sm" variant="ghost" icon="upload" disabled={uploading} onClick={() => fileRef.current?.click()}>
-              {uploading ? "กำลังอัปโหลด..." : "อัปโหลด"}
+            <Btn size="sm" variant="primary" icon="upload" disabled={uploading} onClick={() => fileRef.current?.click()}>
+              {uploading ? "กำลังอัปโหลด..." : "เลือกจากเครื่อง"}
             </Btn>
           </div>
 
           {/* VIDEO GRID */}
           {filtered.length === 0 ? (
-            <div className="muted" style={{ padding: 32, textAlign: "center", fontWeight: 600, border: "1px dashed var(--border-2)", borderRadius: 12 }}>
-              <Icon name="film" size={26} style={{ opacity: .4, marginBottom: 8 }} />
-              <div>ยังไม่มีคลิปใน {src.name}</div>
-              <div style={{ fontSize: 12.5, fontWeight: 500, marginTop: 4 }}>อัปโหลดไฟล์ใหม่ หรือเลือก source อื่น</div>
-            </div>
+            <button onClick={() => fileRef.current?.click()} disabled={uploading}
+              style={{ width: "100%", padding: 32, textAlign: "center", fontWeight: 600, border: "1.5px dashed var(--border-2)", borderRadius: 12, background: "var(--surface)", cursor: "pointer", color: "var(--text-dim)" }}>
+              <Icon name="upload" size={26} style={{ color: "var(--brand)", marginBottom: 8 }} />
+              <div style={{ fontWeight: 800, color: "var(--text)" }}>{uploading ? "กำลังอัปโหลด..." : "อัปโหลดวิดีโอจากเครื่อง"}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 500, marginTop: 4 }}>หรือเลือก source อื่นที่มีคลิปอยู่แล้ว</div>
+            </button>
           ) : (
             <div className="vid-grid">
+              {/* tile อัปโหลดจากเครื่อง */}
+              <button onClick={() => fileRef.current?.click()} disabled={uploading} className="vid-pick"
+                style={{ border: "1.5px dashed var(--border-2)", background: "var(--surface)", display: "grid", placeItems: "center", cursor: "pointer", color: "var(--brand)" }}>
+                <div style={{ textAlign: "center" }}>
+                  <Icon name="upload" size={22} />
+                  <div style={{ fontSize: 11.5, fontWeight: 800, marginTop: 6, color: "var(--text)" }}>{uploading ? "กำลังอัป..." : "จากเครื่อง"}</div>
+                </div>
+              </button>
               {filtered.map(x => {
                 const isUrl = typeof x.cover === "string" && /^https?:\/\//.test(x.cover);
                 const coverStyle = isUrl
