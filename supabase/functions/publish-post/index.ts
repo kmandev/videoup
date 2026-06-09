@@ -167,10 +167,12 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => ({}));
 
-  // โหมด cron: ประมวลผลโพสต์ที่ถึงเวลา (ต้องใช้ service key ใน Authorization)
+  // โหมด cron: ประมวลผลโพสต์ที่ถึงเวลา (ใช้ service key หรือ CRON_SECRET)
   if (body.due) {
     const auth = (req.headers.get("Authorization") || "").replace("Bearer ", "");
-    if (auth !== SERVICE_KEY) return json({ error: "unauthorized (service key required)" }, 401);
+    const CRON_SECRET = Deno.env.get("CRON_SECRET");
+    if (auth !== SERVICE_KEY && !(CRON_SECRET && auth === CRON_SECRET))
+      return json({ error: "unauthorized (cron secret required)" }, 401);
     const { data: due } = await admin.from("posts").select("*").in("status", ["scheduled", "publishing"]).lte("scheduled_at", new Date().toISOString()).order("scheduled_at").limit(5);
     const results = [];
     for (const p of (due || [])) { try { results.push(await processPost(p)); } catch (e) { results.push({ error: (e as Error).message }); } }
