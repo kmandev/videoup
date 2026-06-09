@@ -256,6 +256,27 @@
         .eq('post_id', postId).eq('platform', platform));
     },
 
+    /* ---------- PRODUCTS (สินค้า + เนื้อหา template) ---------- */
+    async listProducts() {
+      if (!window.sb) demo();
+      return ok(await window.sb.from('products').select('*').order('created_at', { ascending: false }));
+    },
+    async createProduct({ name, affiliate_link, content }) {
+      if (!window.sb) demo();
+      const u = await API.auth.current();
+      return ok(await window.sb.from('products').insert({
+        user_id: u.id, name, affiliate_link: affiliate_link || '', content: content || {},
+      }).select().single());
+    },
+    async updateProduct(id, patch) {
+      if (!window.sb) demo();
+      return ok(await window.sb.from('products').update(patch).eq('id', id).select().single());
+    },
+    async deleteProduct(id) {
+      if (!window.sb) demo();
+      ok(await window.sb.from('products').delete().eq('id', id));
+    },
+
     /* ---------- SETTINGS ---------- */
     async getSettings() {
       if (!window.sb) demo();

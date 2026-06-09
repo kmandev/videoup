@@ -20,6 +20,7 @@ const NAV = [
   { id: "dashboard", label: "ภาพรวม", en: "Dashboard", icon: "grid" },
   { id: "calendar",  label: "ปฏิทินโพสต์", en: "Schedule", icon: "calendar" },
   { id: "create",    label: "สร้างโพสต์", en: "Compose", icon: "plus" },
+  { id: "products",  label: "สินค้า", en: "Products", icon: "cart" },
 ];
 const BIZ_NAV = [
   { id: "billing",  label: "แพ็กเกจ & การเงิน", en: "Billing",  icon: "star" },
@@ -28,6 +29,7 @@ const PAGE_SUB = {
   dashboard: "ภาพรวมการอัปโหลดทุกแพลตฟอร์ม",
   calendar:  "จัดการคิวและตารางตั้งเวลาโพสต์",
   create:    "อัปโหลดคลิปไป TikTok · YouTube · Facebook · Shopee · Lazada",
+  products:  "จัดการสินค้าและเนื้อหาแต่ละแพลตฟอร์มไว้ใช้ซ้ำ",
   billing:   "จัดการแพ็กเกจ โควต้าการใช้งาน และบิล",
   settings:  "เชื่อมต่อบัญชี · แพลตฟอร์ม · การแจ้งเตือน · ค่าเริ่มต้น",
 };
@@ -48,6 +50,7 @@ function App() {
   const [liveVideos, setLiveVideos] = useState(null);
   const [liveSources, setLiveSources] = useState(null);
   const [liveConnections, setLiveConnections] = useState(null);
+  const [liveProducts, setLiveProducts] = useState(null);
 
   // แพลตฟอร์มที่เชื่อมต่อแล้ว (live: จาก DB, demo: โชว์ทั้งหมด)
   const connectedPlatforms = liveConnections !== null
@@ -118,6 +121,10 @@ function App() {
       // โหลด platform connections
       try { setLiveConnections(await window.API.listConnections() || []); }
       catch (e) { setLiveConnections([]); }
+
+      // โหลด products
+      try { setLiveProducts(await window.API.listProducts() || []); }
+      catch (e) { setLiveProducts([]); }
 
       // โหลด sources + videos จริงจาก Supabase
       try {
@@ -248,10 +255,12 @@ function App() {
   let screen;
   if (route === "dashboard") screen = <Dashboard go={go} openCreate={() => openCreate()} openPost={openPost} posts={posts} connectedPlatforms={connectedPlatforms} primarySource={(liveSources || []).find(s => s.total_gb > 0) || (liveSources || [])[0]} />;
   else if (route === "calendar") screen = <Calendar openCreate={openCreate} openPost={openPost} posts={posts} />;
+  else if (route === "products") screen = <ProductsScreen onToast={pushToast} />;
   else if (route === "billing")  screen = <Billing currentPlan={plan} onChangePlan={requestPlan} onToast={pushToast} />;
   else if (route === "settings") screen = <Settings onToast={pushToast} user={user} />;
   else screen = <CreatePost initialVid={createSeed.vid} initialDate={createSeed.date}
                    videos={videos} sources={sources} connectedPlatforms={connectedPlatforms}
+                   products={liveProducts !== null ? liveProducts : []}
                    onToast={pushToast} onReload={reloadLibrary}
                    onPublish={handlePublish} onCancel={() => go("dashboard")} />;
 

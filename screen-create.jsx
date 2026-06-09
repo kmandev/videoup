@@ -25,7 +25,7 @@ const PLATFORM_FIELDS = {
   lazada:   { caption: { label: "คำบรรยายสินค้า", required: true, max: 2000 }, hashtags: false, link: true },
 };
 
-function CreatePost({ initialVid, initialDate, videos: propVideos, sources: propSources, connectedPlatforms, onToast, onReload, onPublish, onCancel }) {
+function CreatePost({ initialVid, initialDate, videos: propVideos, sources: propSources, connectedPlatforms, products, onToast, onReload, onPublish, onCancel }) {
   // ใช้ videos จริงจาก Supabase ถ้ามี (live mode) ไม่งั้น fallback mock
   const allVideos = (propVideos && propVideos.length >= 0) ? propVideos : VIDEOS;
   const findVid = (id) => allVideos.find(v => v.id === id) || VID(id);
@@ -96,6 +96,29 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
   useEffect(() => { if (!plats[tab] && selectedPlats.length) setTab(selectedPlats[0]); }, [plats]); // eslint-disable-line
 
   const setField = (plat, field, val) => setContent(c => ({ ...c, [plat]: { ...c[plat], [field]: val } }));
+
+  // เลือกสินค้า → เติมเนื้อหาทุกแพลตฟอร์มจาก template (ลิงก์ว่าง = ใช้ลิงก์หลักของสินค้า)
+  const [productId, setProductId] = useState("");
+  const applyProduct = (id) => {
+    setProductId(id);
+    if (!id) return;
+    const prod = (products || []).find(p => p.id === id);
+    if (!prod) return;
+    setContent(c => {
+      const n = { ...c };
+      PLATFORM_LIST.forEach(k => {
+        const pc = prod.content?.[k] || {};
+        n[k] = {
+          title:    pc.title || n[k]?.title || "",
+          caption:  pc.caption ?? n[k]?.caption ?? "",
+          hashtags: pc.hashtags ?? n[k]?.hashtags ?? "",
+          link:     pc.link || prod.affiliate_link || n[k]?.link || "",
+        };
+      });
+      return n;
+    });
+    onToast?.({ kind: "publishing", title: "เติมเนื้อหาจากสินค้าแล้ว ✓", desc: prod.name });
+  };
   const applyToAll = () => {
     const src = content[tab];
     setContent(c => {
@@ -266,6 +289,17 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
             <div className="muted" style={{ padding: "24px 0", textAlign: "center", fontWeight: 600 }}>เลือกแพลตฟอร์มอย่างน้อย 1 อันก่อน</div>
           ) : (
             <>
+              {/* เลือกสินค้า → เติมเนื้อหาอัตโนมัติ */}
+              {products && products.length > 0 && (
+                <div className="field">
+                  <label><Icon name="cart" size={14} />เลือกสินค้า <span className="opt">(เติมเนื้อหาอัตโนมัติ แก้ไขต่อได้)</span></label>
+                  <select className="input" value={productId} onChange={e => applyProduct(e.target.value)}>
+                    <option value="">— ไม่เลือก / เขียนเอง —</option>
+                    {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+              )}
+
               <div className="plat-tabs">
                 {selectedPlats.map(id => (
                   <button key={id} className={`plat-tab ${tab === id ? "on" : ""}`} onClick={() => setTab(id)}
