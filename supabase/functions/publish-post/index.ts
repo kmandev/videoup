@@ -94,7 +94,7 @@ function buildDesc(t: any): string {
 
 // ---------- อัปขึ้น YouTube (resumable, จัดเป็น Short ด้วย #Shorts) ----------
 async function uploadYouTube(token: string, video: any, t: any, bytes: Uint8Array, contentType: string) {
-  const title = (video.title || "VideoUp clip").replace(/[<>]/g, "").slice(0, 100) || "VideoUp clip";
+  const title = ((t.title || video.title || "VideoUp clip")).replace(/[<>]/g, "").slice(0, 100) || "VideoUp clip";
   const description = buildDesc(t).slice(0, 4900);
   const tags = [...new Set([...(t.hashtags || "").split(/\s+/).map((x: string) => x.replace(/^#/, "")).filter(Boolean), "Shorts"])].slice(0, 15);
   const metadata = {

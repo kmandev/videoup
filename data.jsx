@@ -46,7 +46,7 @@ const VIDEOS = [
 const VID = (id) => VIDEOS.find(v => v.id === id);
 
 /* anchor "today" = Sun 7 Jun 2026 */
-const TODAY = new Date(2026, 5, 7, 9, 30);
+const TODAY = new Date();
 function dAt(dayOffset, h, m) {
   const d = new Date(2026, 5, 7 + dayOffset, h, m || 0);
   return d;

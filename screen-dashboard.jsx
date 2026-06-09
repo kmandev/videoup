@@ -1,9 +1,10 @@
 /* ============================================================
    VideoUp — Dashboard screen
    ============================================================ */
-function Dashboard({ go, openCreate, openPost, posts: propPosts }) {
+function Dashboard({ go, openCreate, openPost, posts: propPosts, connectedPlatforms }) {
   const stats = platformStats();
   const allPosts = propPosts || POSTS;
+  const platList = (connectedPlatforms && connectedPlatforms.length >= 0) ? connectedPlatforms : PLATFORM_LIST;
   const now = TODAY;
   const in24 = new Date(now); in24.setHours(now.getHours() + 24);
 
@@ -54,7 +55,11 @@ function Dashboard({ go, openCreate, openPost, posts: propPosts }) {
           <span className="muted" style={{ fontSize: 13, fontWeight: 600, marginLeft: 9 }}>Platform status</span>
         </div>
         <div className="plat-row">
-          {PLATFORM_LIST.map(id => {
+          {platList.length === 0 ? (
+            <div className="muted" style={{ padding: "18px 4px", fontWeight: 600, fontSize: 13 }}>
+              ยังไม่ได้เชื่อมต่อแพลตฟอร์ม — ไปที่ ตั้งค่า → แพลตฟอร์ม เพื่อเชื่อมต่อ
+            </div>
+          ) : platList.map(id => {
             const p = PLATFORMS[id], st = stats[id];
             return (
               <div key={id} className="plat-card">

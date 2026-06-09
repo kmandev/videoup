@@ -47,6 +47,12 @@ function App() {
   const [livePosts, setLivePosts] = useState(null);   // null = ยังไม่โหลด, [] = โหลดแล้วแต่ว่าง
   const [liveVideos, setLiveVideos] = useState(null);
   const [liveSources, setLiveSources] = useState(null);
+  const [liveConnections, setLiveConnections] = useState(null);
+
+  // แพลตฟอร์มที่เชื่อมต่อแล้ว (live: จาก DB, demo: โชว์ทั้งหมด)
+  const connectedPlatforms = liveConnections !== null
+    ? liveConnections.filter(c => c.connected).map(c => c.platform)
+    : PLATFORM_LIST;
 
   // normalize posts จาก view (scheduled_at string) → ให้มี when(Date) + title สำหรับ UI
   const normPosts = (arr) => (arr || []).map(p => ({
@@ -108,6 +114,10 @@ function App() {
         const data = await window.API.listPosts();
         setLivePosts(normPosts(data));
       } catch (e) { console.warn("[VideoUp] โหลด posts ไม่สำเร็จ:", e.message); setLivePosts([]); }
+
+      // โหลด platform connections
+      try { setLiveConnections(await window.API.listConnections() || []); }
+      catch (e) { setLiveConnections([]); }
 
       // โหลด sources + videos จริงจาก Supabase
       try {
@@ -236,12 +246,13 @@ function App() {
   };
 
   let screen;
-  if (route === "dashboard") screen = <Dashboard go={go} openCreate={() => openCreate()} openPost={openPost} posts={posts} />;
+  if (route === "dashboard") screen = <Dashboard go={go} openCreate={() => openCreate()} openPost={openPost} posts={posts} connectedPlatforms={connectedPlatforms} />;
   else if (route === "calendar") screen = <Calendar openCreate={openCreate} openPost={openPost} posts={posts} />;
   else if (route === "billing")  screen = <Billing currentPlan={plan} onChangePlan={requestPlan} onToast={pushToast} />;
   else if (route === "settings") screen = <Settings onToast={pushToast} user={user} />;
   else screen = <CreatePost initialVid={createSeed.vid} initialDate={createSeed.date}
-                   videos={videos} sources={sources} onToast={pushToast} onReload={reloadLibrary}
+                   videos={videos} sources={sources} connectedPlatforms={connectedPlatforms}
+                   onToast={pushToast} onReload={reloadLibrary}
                    onPublish={handlePublish} onCancel={() => go("dashboard")} />;
 
   const cur = [...NAV, ...BIZ_NAV].find(n => n.id === route) || NAV[0];

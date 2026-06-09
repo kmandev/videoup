@@ -16,13 +16,27 @@ const LINK_PH = {
   lazada:   "https://s.lazada.co.th/s.xxxx",
 };
 
-function CreatePost({ initialVid, initialDate, videos: propVideos, sources: propSources, onToast, onReload, onPublish, onCancel }) {
+// ข้อกำหนด field ของแต่ละแพลตฟอร์ม (required / max / มี title ไหม)
+const PLATFORM_FIELDS = {
+  youtube:  { title: { required: true, max: 100 },  caption: { label: "คำอธิบาย (Description)", required: false, max: 5000 }, hashtags: true,  link: true },
+  tiktok:   { caption: { label: "แคปชั่น", required: true,  max: 2200 }, hashtags: true,  link: true },
+  facebook: { caption: { label: "แคปชั่น", required: true,  max: 2200 }, hashtags: true,  link: true },
+  shopee:   { caption: { label: "คำบรรยายสินค้า", required: true, max: 2000 }, hashtags: false, link: true },
+  lazada:   { caption: { label: "คำบรรยายสินค้า", required: true, max: 2000 }, hashtags: false, link: true },
+};
+
+function CreatePost({ initialVid, initialDate, videos: propVideos, sources: propSources, connectedPlatforms, onToast, onReload, onPublish, onCancel }) {
   // ใช้ videos จริงจาก Supabase ถ้ามี (live mode) ไม่งั้น fallback mock
   const allVideos = (propVideos && propVideos.length >= 0) ? propVideos : VIDEOS;
   const findVid = (id) => allVideos.find(v => v.id === id) || VID(id);
   const live = window.API && window.API.isLive();
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
+
+  // source/platform ที่ใช้ได้จริง (เฉพาะที่เชื่อมต่อแล้ว)
+  const connectedSourceTypes = new Set((propSources || []).map(s => s.type));
+  const availSources = SOURCE_LIST.filter(id => id === "url" || connectedSourceTypes.has(id));
+  const availPlatforms = (connectedPlatforms && connectedPlatforms.length >= 0) ? connectedPlatforms : PLATFORM_LIST;
 
   // รวมข้อมูล source จริง (account/path/storage) กับ mock (สี/ไอคอน/ชื่อ)
   const srcRow = (type) => (propSources || []).find(s => s.type === type);
@@ -52,18 +66,21 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
     } finally { setUploading(false); }
   };
   const [vid, setVid] = useState(initialVid || null);
-  // source filter for the library (defaults to the selected video's source, or gdrive)
-  const [activeSource, setActiveSource] = useState(() => (initialVid && findVid(initialVid)?.source) || "gdrive");
-  const [plats, setPlats] = useState({ tiktok: true, facebook: true, shopee: false, youtube: false, lazada: false });
+  // source filter — default = source ของคลิปที่เลือก หรือ source แรกที่เชื่อมต่อ
+  const [activeSource, setActiveSource] = useState(() =>
+    (initialVid && findVid(initialVid)?.source) || availSources.find(s => s !== "url") || availSources[0] || "url");
+  // platform — เปิดเฉพาะที่เชื่อมต่อแล้ว (default เปิดทั้งหมดที่ใช้ได้)
+  const [plats, setPlats] = useState(() => {
+    const init = {};
+    availPlatforms.forEach(k => { init[k] = true; });
+    return init;
+  });
   const [content, setContent] = useState(() => {
     const c = {};
-    PLATFORM_LIST.forEach(k => c[k] = { ...CONTENT_TPL[k] });
-    c.tiktok.caption   = "เปิดตัวรุ่นใหม่! ของดีบอกต่อ 🔥 กดลิงก์ช้อปได้เลย";
-    c.facebook.caption = "ของดีบอกต่อ ใครยังไม่มีต้องลอง 👇 ลิงก์ในโพสต์";
-    c.shopee.caption   = "ลดแรงเฉพาะไลฟ์ กดตะกร้าด่วน 🛒";
+    PLATFORM_LIST.forEach(k => c[k] = { title: "", ...CONTENT_TPL[k] });
     return c;
   });
-  const [tab, setTab] = useState("tiktok");
+  const [tab, setTab] = useState(availPlatforms[0] || "youtube");
   const [mode, setMode] = useState("later"); // now | later
   const [date, setDate] = useState(() => {
     const d = initialDate || new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() + 1);
@@ -89,10 +106,20 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
   };
 
   const v = vid ? findVid(vid) : null;
-  const cur = content[tab] || CONTENT_TPL[tab];
-  const canPublish = vid && selectedPlats.length > 0;
+  const cur = content[tab] || { title: "", ...CONTENT_TPL[tab] };
+  const FIELDS = PLATFORM_FIELDS[tab] || PLATFORM_FIELDS.tiktok;
   const filtered = allVideos.filter(x => x.source === activeSource);
   const src = srcInfo(activeSource);
+
+  // ตรวจ field ที่จำเป็นของแต่ละแพลตฟอร์มที่เลือก
+  const missingRequired = selectedPlats.filter(pl => {
+    const f = PLATFORM_FIELDS[pl] || {};
+    const c = content[pl] || {};
+    if (f.title?.required && !(c.title || "").trim() && !(v?.title)) return true;
+    if (f.caption?.required && !(c.caption || "").trim()) return true;
+    return false;
+  });
+  const canPublish = vid && selectedPlats.length > 0 && missingRequired.length === 0;
 
   const [publishing, setPublishing] = useState(false);
   const doPublish = async () => {
@@ -124,7 +151,7 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
 
           {/* SOURCE TABS */}
           <div className="src-tabs">
-            {SOURCE_LIST.map(id => {
+            {availSources.map(id => {
               const s = SOURCES[id], on = activeSource === id;
               return (
                 <button key={id} className={`src-tab ${on ? "on" : ""}`}
@@ -204,8 +231,13 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
             <span className="stitle">เลือกแพลตฟอร์ม</span>
             <span className="sopt" style={{ marginLeft: "auto" }}>{selectedPlats.length} แพลตฟอร์ม</span>
           </div>
+          {availPlatforms.length === 0 ? (
+            <div className="muted" style={{ padding: "16px 0", fontWeight: 600, fontSize: 13 }}>
+              ยังไม่ได้เชื่อมต่อแพลตฟอร์มใดเลย — ไปที่ <b>ตั้งค่า → แพลตฟอร์ม</b> เพื่อเชื่อมต่อก่อน
+            </div>
+          ) : (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {PLATFORM_LIST.map(id => {
+            {availPlatforms.map(id => {
               const p = PLATFORMS[id], on = plats[id];
               return (
                 <button key={id} className={`chip ${on ? "on" : ""}`}
@@ -220,6 +252,7 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
               );
             })}
           </div>
+          )}
         </div>
 
         {/* STEP 3 — per-platform content */}
@@ -243,12 +276,28 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
                 ))}
               </div>
 
+              {/* Title (เฉพาะแพลตฟอร์มที่ต้องมี เช่น YouTube) */}
+              {FIELDS.title && (
+                <div className="field">
+                  <label><Icon name="edit" size={14} />ชื่อวิดีโอ (Title)
+                    {FIELDS.title.required && <span className="opt" style={{ color: "var(--err)" }}>* จำเป็น</span>}
+                    <span className="cnt">{(cur.title || "").length}/{FIELDS.title.max}</span>
+                  </label>
+                  <input className="input" value={cur.title || ""} maxLength={FIELDS.title.max}
+                    placeholder={v ? v.title : `ชื่อวิดีโอบน ${PLATFORMS[tab].short}...`}
+                    onChange={e => setField(tab, "title", e.target.value)} />
+                </div>
+              )}
+
               <div className="field">
-                <label><Icon name="edit" size={14} />Caption / คำบรรยาย
-                  <span className="cnt">{cur.caption.length}/2200</span>
+                <label><Icon name="edit" size={14} />{FIELDS.caption.label}
+                  {FIELDS.caption.required
+                    ? <span className="opt" style={{ color: "var(--err)" }}>* จำเป็น</span>
+                    : <span className="opt">(ไม่บังคับ)</span>}
+                  <span className="cnt">{cur.caption.length}/{FIELDS.caption.max}</span>
                 </label>
-                <textarea className="textarea" rows={3} value={cur.caption}
-                  placeholder={`เขียนแคปชั่นสำหรับ ${PLATFORMS[tab].short}...`}
+                <textarea className="textarea" rows={3} value={cur.caption} maxLength={FIELDS.caption.max}
+                  placeholder={`เขียน${FIELDS.caption.label}สำหรับ ${PLATFORMS[tab].short}...`}
                   onChange={e => setField(tab, "caption", e.target.value)} />
                 {selectedPlats.length > 1 && (
                   <button className="apply-all" onClick={applyToAll}>
@@ -257,23 +306,34 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
                 )}
               </div>
 
-              <div className="field">
-                <label><Icon name="hash" size={14} />แฮชแท็ก <span className="opt">(เว้นวรรคหรือ #)</span></label>
-                <input className="input" value={cur.hashtags}
-                  placeholder="#รีวิว #ของดี"
-                  onChange={e => setField(tab, "hashtags", e.target.value)} />
-              </div>
-
-              <div className="field" style={{ marginBottom: 0 }}>
-                <label><Icon name="link" size={14} />ลิงก์ Affiliate <span className="opt">({PLATFORMS[tab].name})</span></label>
-                <input className="input link" value={cur.link}
-                  placeholder={LINK_PH[tab]}
-                  onChange={e => setField(tab, "link", e.target.value)} />
-                <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8, fontSize: 12, color: "var(--text-dim)", fontWeight: 600 }}>
-                  <Icon name="cart" size={14} style={{ color: PLATFORMS[tab].accent }} />
-                  ลิงก์จะถูกแนบใน{tab === "youtube" ? "คำอธิบายวิดีโอ" : tab === "facebook" ? "โพสต์" : "โพสต์/bio"} อัตโนมัติตอนโพสต์
+              {FIELDS.hashtags && (
+                <div className="field">
+                  <label><Icon name="hash" size={14} />แฮชแท็ก <span className="opt">(เว้นวรรคหรือ #)</span></label>
+                  <input className="input" value={cur.hashtags}
+                    placeholder="#รีวิว #ของดี"
+                    onChange={e => setField(tab, "hashtags", e.target.value)} />
                 </div>
-              </div>
+              )}
+
+              {FIELDS.link && (
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label><Icon name="link" size={14} />ลิงก์ Affiliate <span className="opt">({PLATFORMS[tab].name})</span></label>
+                  <input className="input link" value={cur.link}
+                    placeholder={LINK_PH[tab]}
+                    onChange={e => setField(tab, "link", e.target.value)} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8, fontSize: 12, color: "var(--text-dim)", fontWeight: 600 }}>
+                    <Icon name="cart" size={14} style={{ color: PLATFORMS[tab].accent }} />
+                    ลิงก์จะถูกแนบใน{tab === "youtube" ? "คำอธิบายวิดีโอ" : tab === "facebook" ? "โพสต์" : "โพสต์/bio"} อัตโนมัติตอนโพสต์
+                  </div>
+                </div>
+              )}
+
+              {missingRequired.length > 0 && (
+                <div style={{ marginTop: 14, fontSize: 12.5, fontWeight: 700, color: "var(--err)", display: "flex", alignItems: "center", gap: 6 }}>
+                  <Icon name="alert" size={14} />
+                  ยังกรอกข้อมูลที่จำเป็นไม่ครบ: {missingRequired.map(p => PLATFORMS[p].short).join(", ")}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -360,7 +420,13 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
       <div className="preview-col">
         <div className="phone">
           <div className="phone-screen">
-            <div className="phone-video" style={{ background: v ? v.cover : "linear-gradient(135deg,#2a2a33,#15151b)" }} />
+            <div className="phone-video" style={
+              v
+                ? (/^https?:\/\//.test(v.cover)
+                    ? { backgroundImage: `url(${v.cover})`, backgroundSize: "cover", backgroundPosition: "center" }
+                    : { background: v.cover })
+                : { background: "linear-gradient(135deg,#2a2a33,#15151b)" }
+            } />
             {!v && (
               <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "rgba(255,255,255,.6)", textAlign: "center", padding: 20 }}>
                 <div><Icon name="film" size={30} /><div style={{ fontSize: 13, fontWeight: 600, marginTop: 8 }}>เลือกวิดีโอเพื่อดูตัวอย่าง</div></div>
@@ -368,9 +434,14 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
             )}
             {v && (
               <>
+                {/* แถบเวลา + แพลตฟอร์ม (ของจริง ไม่ใส่ตัวเลขปลอม) */}
+                <div style={{ position: "absolute", top: 10, left: 10, display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ background: "rgba(0,0,0,.55)", color: "#fff", fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 6, fontFamily: "var(--font-mono)" }}>{v.dur}s</span>
+                  {tab === "youtube" && <span style={{ background: PLATFORMS.youtube.color, color: "#fff", fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 6 }}>Shorts</span>}
+                </div>
                 <div className="phone-rail">
-                  <div className="r"><span className="rc"><Icon name="heart" size={19} /></span>12.4k</div>
-                  <div className="r"><span className="rc"><Icon name="send" size={18} /></span>320</div>
+                  <div className="r"><span className="rc"><Icon name="heart" size={19} /></span></div>
+                  <div className="r"><span className="rc"><Icon name="send" size={18} /></span></div>
                   {(tab === "shopee" || tab === "lazada") && <div className="r"><span className="rc" style={{ background: PLATFORMS[tab].accent }}><Icon name="cart" size={18} /></span>ซื้อ</div>}
                 </div>
                 <div className="phone-overlay">
@@ -380,7 +451,13 @@ function CreatePost({ initialVid, initialDate, videos: propVideos, sources: prop
                     </div>
                     <span style={{ color: "#fff", fontWeight: 700, fontSize: 13, textShadow: "0 1px 4px rgba(0,0,0,.5)" }}>{PLATFORMS[tab].handle}</span>
                   </div>
-                  <div className="pcap">{cur.caption || <span style={{ opacity: .6 }}>แคปชั่นจะแสดงที่นี่...</span>}</div>
+                  {/* YouTube มี title — แสดงเป็นหัวข้อ */}
+                  {FIELDS.title && (
+                    <div style={{ color: "#fff", fontWeight: 800, fontSize: 13.5, marginBottom: 4, textShadow: "0 1px 4px rgba(0,0,0,.6)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                      {cur.title || v.title}
+                    </div>
+                  )}
+                  <div className="pcap">{cur.caption || <span style={{ opacity: .6 }}>{FIELDS.caption.label}จะแสดงที่นี่...</span>}</div>
                   {cur.hashtags && <div className="ptags">{cur.hashtags}</div>}
                   {cur.link && <span className="plink"><Icon name="cart" size={13} />ช้อปเลย · affiliate</span>}
                 </div>

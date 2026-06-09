@@ -213,12 +213,19 @@
       const rows = payload.platforms.map(pl => ({
         post_id: post.id,
         platform: pl,
+        title: payload.content?.[pl]?.title || null,
         caption: payload.content?.[pl]?.caption || '',
         hashtags: payload.content?.[pl]?.hashtags || '',
         affiliate_link: payload.content?.[pl]?.link || '',
         status: 'scheduled',
       }));
-      ok(await window.sb.from('post_platforms').insert(rows));
+      // insert พร้อม title — ถ้า DB ยังไม่มีคอลัมน์ title ให้ retry แบบไม่มี (กันพัง)
+      let res = await window.sb.from('post_platforms').insert(rows);
+      if (res.error && /title/.test(res.error.message || '')) {
+        const noTitle = rows.map(({ title, ...r }) => r);
+        res = await window.sb.from('post_platforms').insert(noTitle);
+      }
+      if (res.error) throw res.error;
       return post;
     },
 
