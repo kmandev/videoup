@@ -55,7 +55,7 @@ function ProductsScreen({ onToast }) {
     setEditing(null);
   };
 
-  if (editing) return <ProductEditor initial={editing} onSave={save} onCancel={() => setEditing(null)} />;
+  if (editing) return <ProductEditor initial={editing} onSave={save} onCancel={() => setEditing(null)} onToast={onToast} />;
 
   return (
     <div style={{ maxWidth: 920 }}>
@@ -103,11 +103,39 @@ function ProductsScreen({ onToast }) {
   );
 }
 
-function ProductEditor({ initial, onSave, onCancel }) {
+function ProductEditor({ initial, onSave, onCancel, onToast }) {
   const [name, setName] = useState(initial.name || "");
   const [c, setC] = useState(initial.content || emptyProductContent());
+  const [aiLoading, setAiLoading] = useState(false);
   const setF = (f, val) => setC(x => ({ ...x, [f]: val }));
   const setLink = (plat, val) => setC(x => ({ ...x, links: { ...x.links, [plat]: val } }));
+
+  // ให้ AI ช่วยคิดเนื้อหาจากชื่อสินค้า
+  const aiGenerate = async () => {
+    if (!name.trim()) { onToast?.({ kind: "scheduled", title: "ใส่ชื่อสินค้าก่อน", desc: "AI ต้องใช้ชื่อสินค้าเพื่อคิดเนื้อหา" }); return; }
+    setAiLoading(true);
+    try {
+      const live = window.API && window.API.isLive();
+      let gen;
+      if (live) {
+        gen = await window.API.generateProductContent(name.trim(), c.caption || "");
+      } else {
+        // โหมดสาธิต: จำลองผลลัพธ์ในเครื่อง (เวอร์ชันจริงจะเรียก Claude ผ่าน Edge Function)
+        await new Promise(r => setTimeout(r, 700));
+        gen = {
+          title: `รีวิว${name.trim()} ใช้ดีจริงไหม? ดูก่อนตัดสินใจ`,
+          caption: `${name.trim()} ตัวช่วยที่หลายคนมองหา คุ้มเกินราคา 🔥 กดดูเลย!`,
+          hashtags: "#รีวิว #ของมันต้องมี #ของน่าซื้อ #affiliate",
+        };
+      }
+      setC(x => ({ ...x, title: gen.title || x.title, caption: gen.caption || x.caption, hashtags: gen.hashtags || x.hashtags }));
+      onToast?.({ kind: "publishing", title: "AI คิดเนื้อหาให้แล้ว ✨", desc: "ปรับแก้ได้ตามต้องการ" });
+    } catch (e) {
+      onToast?.({ kind: "scheduled", title: "สร้างเนื้อหาไม่สำเร็จ", desc: e.message });
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   return (
     <div style={{ maxWidth: 720 }}>
@@ -118,7 +146,12 @@ function ProductEditor({ initial, onSave, onCancel }) {
 
       {/* เนื้อหาหลัก (ใช้ทุกแพลตฟอร์ม) */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div className="nav-label" style={{ padding: "0 0 10px" }}>ข้อมูลสินค้า + เนื้อหาหลัก</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 0 10px" }}>
+          <div className="nav-label" style={{ padding: 0 }}>ข้อมูลสินค้า + เนื้อหาหลัก</div>
+          <Btn size="sm" variant="primary" icon="star" style={{ marginLeft: "auto" }} disabled={aiLoading} onClick={aiGenerate}>
+            {aiLoading ? "กำลังคิด..." : "AI ช่วยคิดเนื้อหา"}
+          </Btn>
+        </div>
         <div className="field">
           <label><Icon name="cart" size={14} />ชื่อสินค้า <span className="opt" style={{ color: "var(--err)" }}>* จำเป็น</span></label>
           <input className="input" value={name} placeholder="เช่น เครื่องตัดแต่งพุ่มไม้ไร้สาย" onChange={e => setName(e.target.value)} />

@@ -301,6 +301,21 @@
       ok(await window.sb.from('products').delete().eq('id', id));
     },
 
+    // ให้ AI ช่วยคิดเนื้อหาสินค้าจากชื่อ → { title, caption, hashtags }
+    async generateProductContent(name, hint) {
+      if (!window.sb) demo();
+      const { data: { session } } = await window.sb.auth.getSession();
+      if (!session) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+      const res = await fetch(`${window.SUPABASE_URL}/functions/v1/ai-content`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ name, hint }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'สร้างเนื้อหาไม่สำเร็จ');
+      return j;
+    },
+
     /* ---------- SETTINGS ---------- */
     async getSettings() {
       if (!window.sb) demo();

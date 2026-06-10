@@ -139,6 +139,27 @@ sudo journalctl -u videoup-scheduler -f   # ดู log สด
 
 ---
 
+## 5.5 AI ช่วยคิดเนื้อหาสินค้า (Claude)
+
+หน้า **สินค้า → เพิ่ม/แก้ไขสินค้า** มีปุ่ม **"AI ช่วยคิดเนื้อหา"** ที่สร้าง
+title / แคปชั่น / แฮชแท็ก จากชื่อสินค้าโดยอัตโนมัติ ผ่าน Edge Function
+[`supabase/functions/ai-content`](supabase/functions/ai-content/index.ts)
+ที่เรียก Claude (`claude-opus-4-8`) — API key อยู่ฝั่ง server เท่านั้น
+
+```sh
+# 1. ขอ API key ที่ https://console.anthropic.com → API Keys
+# 2. ตั้งเป็น secret ของ Supabase
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+
+# 3. deploy ฟังก์ชัน
+supabase functions deploy ai-content
+```
+
+> โหมดสาธิต (config.js ว่าง) ปุ่มจะจำลองผลลัพธ์ในเครื่อง ไม่เรียก API จริง
+> ค่าใช้จ่าย Claude คิดตามการใช้งาน (pay-as-you-go) แยกจาก free tier ของ Supabase/Vercel
+
+---
+
 ## 6. เช็กลิสต์เริ่มใช้งานฟรี
 
 - [ ] สร้าง Supabase project + รัน `db/schema.sql`
