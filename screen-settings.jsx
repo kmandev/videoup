@@ -25,9 +25,9 @@ function Settings({ onToast, user }) {
   };
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 22, alignItems: "start", maxWidth: 1060 }}>
+    <div className="settings-shell" style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 22, alignItems: "start", maxWidth: 1060 }}>
       {/* left tab list */}
-      <div className="card card-pad" style={{ padding: "10px 8px", position: "sticky", top: 92 }}>
+      <div className="card card-pad settings-tabs" style={{ padding: "10px 8px", position: "sticky", top: 92 }}>
         {SETTINGS_TABS.map(t => (
           <button key={t.id} className={`nav-item ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)} style={{ width: "100%" }}>
             <Icon name={t.icon} size={17} />{t.label}
@@ -70,7 +70,7 @@ function SettingCard({ title, desc, children, onSave, saved }) {
 function FieldRow({ label, hint, children }) {
   return (
     <div className="field">
-      <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <label style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
         <span style={{ fontWeight: 700, fontSize: 13.5 }}>{label}</span>
         {hint && <span className="muted" style={{ fontWeight: 600, fontSize: 11.5 }}>{hint}</span>}
       </label>
