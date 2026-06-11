@@ -7,7 +7,16 @@ const SETTINGS_TABS = [
   { id: "platforms",     label: "แพลตฟอร์ม",         icon: "send" },
   { id: "sources",       label: "แหล่งวิดีโอ",        icon: "drive" },
   { id: "notifications", label: "การแจ้งเตือน",       icon: "bell" },
+  { id: "ai",            label: "AI ออโต้เจน",        icon: "bolt" },
   { id: "defaults",      label: "ค่าเริ่มต้น",         icon: "settings" },
+];
+
+// ผู้ให้บริการ AI ที่รองรับ — ผู้ใช้เลือกเองและใส่ API key ของตัวเอง
+const AI_PROVIDERS = [
+  { id: "openai",    name: "OpenAI (GPT)",     model: "gpt-4o-mini",            keyHint: "ขึ้นต้นด้วย sk-...", keyUrl: "https://platform.openai.com/api-keys" },
+  { id: "gemini",    name: "Google Gemini",    model: "gemini-2.0-flash",       keyHint: "จาก Google AI Studio", keyUrl: "https://aistudio.google.com/apikey" },
+  { id: "anthropic", name: "Anthropic Claude", model: "claude-3-5-haiku-20241022", keyHint: "ขึ้นต้นด้วย sk-ant-...", keyUrl: "https://console.anthropic.com/settings/keys" },
+  { id: "deepseek",  name: "DeepSeek",         model: "deepseek-chat",          keyHint: "จาก DeepSeek Platform", keyUrl: "https://platform.deepseek.com/api_keys" },
 ];
 
 /* mock saved state */
@@ -41,6 +50,7 @@ function Settings({ onToast, user }) {
         {tab === "platforms"     && <PlatformsSection onSave={() => save("platforms")} saved={saved.platforms} onToast={onToast} />}
         {tab === "sources"       && <SourcesSection onSave={() => save("sources")} saved={saved.sources} onToast={onToast} />}
         {tab === "notifications" && <NotifSection onToast={onToast} />}
+        {tab === "ai"            && <AiSection onToast={onToast} />}
         {tab === "defaults"      && <DefaultsSection onSave={() => save("defaults")} saved={saved.defaults} />}
       </div>
     </div>
@@ -462,6 +472,77 @@ function NotifSection({ onToast }) {
         </FieldRow>
       </SettingCard>
     </>
+  );
+}
+
+/* ============================================================
+   AI ออโต้เจน
+   ============================================================ */
+function AiSection({ onToast }) {
+  const live = window.API && window.API.isLive();
+  const [provider, setProvider] = useState("openai");
+  const [apiKey, setApiKey] = useState("");
+  const [model, setModel] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    if (!live) return;
+    (async () => {
+      try {
+        const s = await window.API.getSettings();
+        if (s) {
+          setProvider(s.ai_provider || "openai");
+          setApiKey(s.ai_api_key || "");
+          setModel(s.ai_model || "");
+        }
+      } catch (e) {}
+    })();
+  }, []);
+
+  const cur = AI_PROVIDERS.find(p => p.id === provider) || AI_PROVIDERS[0];
+
+  const save = async () => {
+    if (live) {
+      try {
+        await window.API.saveSettings({ ai_provider: provider, ai_api_key: apiKey, ai_model: model });
+      } catch (e) { onToast?.({ kind: "scheduled", title: "บันทึกไม่สำเร็จ", desc: e.message }); return; }
+    }
+    setSaved(true); setTimeout(() => setSaved(false), 2000);
+    onToast?.({ kind: "publishing", title: "บันทึกการตั้งค่า AI แล้ว ✓" });
+  };
+
+  const test = async () => {
+    if (!apiKey.trim()) { onToast?.({ kind: "scheduled", title: "ใส่ API key ก่อน" }); return; }
+    if (!live) { onToast?.({ kind: "publishing", title: "ทดสอบสำเร็จ (demo)" }); return; }
+    setTesting(true);
+    try {
+      await window.API.saveSettings({ ai_provider: provider, ai_api_key: apiKey, ai_model: model });
+      const r = await window.API.generateContent("ทดสอบระบบ AI ออโต้เจน");
+      onToast?.({ kind: "publishing", title: "เชื่อมต่อ AI สำเร็จ ✓", desc: r.title || "" });
+    } catch (e) { onToast?.({ kind: "scheduled", title: "ทดสอบไม่สำเร็จ", desc: e.message }); }
+    finally { setTesting(false); }
+  };
+
+  return (
+    <SettingCard title="AI ออโต้เจนเนื้อหา" desc="ใช้ AI สร้างชื่อวิดีโอ แคปชั่น และแฮชแท็ก จากชื่อสินค้าโดยอัตโนมัติ (หน้าสินค้า)" onSave={save} saved={saved}>
+      <FieldRow label="ผู้ให้บริการ AI" hint="เลือกเจ้าที่คุณมี API key อยู่แล้ว — ค่าใช้จ่ายเรียกเก็บตามผู้ให้บริการนั้นโดยตรง">
+        <select className="input" value={provider} onChange={e => { setProvider(e.target.value); setModel(""); }}>
+          {AI_PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </FieldRow>
+      <FieldRow label="API Key" hint={<>{cur.keyHint} · <a href={cur.keyUrl} target="_blank" rel="noreferrer" style={{ color: "var(--brand)" }}>ขอ API key ที่นี่</a></>}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input className="input mono" type={showKey ? "text" : "password"} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={cur.keyHint} style={{ flex: 1 }} />
+          <Btn size="sm" variant="ghost" icon={showKey ? "x" : "eye"} onClick={() => setShowKey(s => !s)} />
+          <Btn size="sm" variant="ghost" icon="send" disabled={testing} onClick={test}>{testing ? "..." : "ทดสอบ"}</Btn>
+        </div>
+      </FieldRow>
+      <FieldRow label="โมเดล" hint={`ไม่บังคับ — เว้นว่างไว้ใช้ค่าเริ่มต้น (${cur.model})`}>
+        <input className="input mono" value={model} onChange={e => setModel(e.target.value)} placeholder={cur.model} />
+      </FieldRow>
+    </SettingCard>
   );
 }
 

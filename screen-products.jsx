@@ -55,7 +55,7 @@ function ProductsScreen({ onToast }) {
     setEditing(null);
   };
 
-  if (editing) return <ProductEditor initial={editing} onSave={save} onCancel={() => setEditing(null)} />;
+  if (editing) return <ProductEditor initial={editing} onSave={save} onCancel={() => setEditing(null)} onToast={onToast} />;
 
   return (
     <div style={{ maxWidth: 920 }}>
@@ -103,11 +103,25 @@ function ProductsScreen({ onToast }) {
   );
 }
 
-function ProductEditor({ initial, onSave, onCancel }) {
+function ProductEditor({ initial, onSave, onCancel, onToast }) {
   const [name, setName] = useState(initial.name || "");
   const [c, setC] = useState(initial.content || emptyProductContent());
+  const [generating, setGenerating] = useState(false);
   const setF = (f, val) => setC(x => ({ ...x, [f]: val }));
   const setLink = (plat, val) => setC(x => ({ ...x, links: { ...x.links, [plat]: val } }));
+
+  const generate = async () => {
+    if (!name.trim()) { onToast?.({ kind: "scheduled", title: "ใส่ชื่อสินค้าก่อน" }); return; }
+    setGenerating(true);
+    try {
+      const r = window.API && window.API.isLive()
+        ? await window.API.generateContent(name.trim())
+        : { title: `รีวิว${name.trim()} ใช้ดีไหม?`, caption: `ตัวช่วยดีๆ ที่คุณอาจไม่เคยรู้จัก ลองดูคลิปนี้เลย 🔥`, hashtags: "#รีวิว #ของน่าซื้อ #ของมันต้องมี" };
+      setC(x => ({ ...x, title: r.title || x.title, caption: r.caption || x.caption, hashtags: r.hashtags || x.hashtags }));
+      onToast?.({ kind: "publishing", title: "สร้างเนื้อหาด้วย AI แล้ว ✓" });
+    } catch (e) { onToast?.({ kind: "scheduled", title: "สร้างเนื้อหาไม่สำเร็จ", desc: e.message }); }
+    finally { setGenerating(false); }
+  };
 
   return (
     <div style={{ maxWidth: 720 }}>
@@ -118,10 +132,16 @@ function ProductEditor({ initial, onSave, onCancel }) {
 
       {/* เนื้อหาหลัก (ใช้ทุกแพลตฟอร์ม) */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div className="nav-label" style={{ padding: "0 0 10px" }}>ข้อมูลสินค้า + เนื้อหาหลัก</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 0 10px", gap: 10 }}>
+          <div className="nav-label" style={{ padding: 0 }}>ข้อมูลสินค้า + เนื้อหาหลัก</div>
+          <Btn size="sm" variant="ghost" icon="bolt" disabled={generating} onClick={generate}>
+            {generating ? "กำลังสร้าง..." : "สร้างด้วย AI"}
+          </Btn>
+        </div>
         <div className="field">
           <label><Icon name="cart" size={14} />ชื่อสินค้า <span className="opt" style={{ color: "var(--err)" }}>* จำเป็น</span></label>
           <input className="input" value={name} placeholder="เช่น เครื่องตัดแต่งพุ่มไม้ไร้สาย" onChange={e => setName(e.target.value)} />
+          <div className="muted" style={{ fontSize: 11.5, fontWeight: 600, marginTop: 4 }}>ใช้ชื่อสินค้านี้เป็น keyword หลักในการสร้างชื่อวิดีโอ/แคปชั่น/แฮชแท็ก</div>
         </div>
         <div className="field">
           <label><Icon name="edit" size={14} />ชื่อวิดีโอ / Title <span className="opt">(ใช้กับ YouTube)</span></label>

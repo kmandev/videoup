@@ -315,6 +315,21 @@
         .select().single());
     },
 
+    // สร้างชื่อวิดีโอ/แคปชั่น/แฮชแท็กอัตโนมัติด้วย AI จากชื่อสินค้า
+    async generateContent(productName, platform) {
+      if (!window.sb) demo();
+      const { data: { session } } = await window.sb.auth.getSession();
+      if (!session) throw new Error('กรุณาเข้าสู่ระบบก่อน');
+      const res = await fetch(`${window.SUPABASE_URL}/functions/v1/generate-content`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ productName, platform }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'สร้างเนื้อหาไม่สำเร็จ');
+      return j; // { title, caption, hashtags }
+    },
+
     // ส่งข้อความทดสอบ Telegram
     async testTelegram(chatId) {
       if (!window.sb) demo();

@@ -102,6 +102,7 @@ supabase functions deploy upload-source --no-verify-jwt
 supabase functions deploy publish-post --no-verify-jwt
 supabase functions deploy publish-local --no-verify-jwt
 supabase functions deploy telegram-test --no-verify-jwt
+supabase functions deploy generate-content --no-verify-jwt
 ```
 
 ตั้ง secrets (client id/secret ของแต่ละ provider + bot token):
