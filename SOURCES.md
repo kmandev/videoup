@@ -17,7 +17,7 @@ Edge Function แลก code → access/refresh token (ใช้ client secret)
    ▼
 redirect กลับเว็บ → แสดง "เชื่อมต่อสำเร็จ ✓"
    ▼
-Raspberry Pi ใช้ token นั้นดึง/ลบไฟล์ตอนโพสต์
+Edge Function publish-post ใช้ token นั้นดึง/ลบไฟล์ตอนโพสต์ (รันบน cloud)
 ```
 
 ---
@@ -97,10 +97,10 @@ supabase secrets set \
 
 ---
 
-## ขั้นที่ 5 — ให้ Raspberry Pi ใช้ token
+## ขั้นที่ 5 — ให้ Edge Function `publish-post` ใช้ token
 
-ใส่ client id/secret ชุดเดียวกันใน `scheduler/.env` (ดู `.env.example`)
-เพื่อให้ Pi refresh token แล้วดึง/ลบไฟล์ได้ (โค้ดอยู่ใน `scheduler/platforms.js`)
+ใส่ client id/secret ชุดเดียวกันด้วย `supabase secrets set` (ดูขั้นที่ 3)
+เพื่อให้ `publish-post` refresh token แล้วดึง/ลบไฟล์ได้ตอนถึงเวลาโพสต์ (รันบน cloud ผ่าน pg_cron)
 
 > **หมายเหตุ `video.file_path`** ต้องเป็นตัวระบุไฟล์ของผู้ให้บริการ:
 > - Google Drive → **file ID**
@@ -115,4 +115,3 @@ supabase secrets set \
 - [ ] `supabase functions deploy oauth-source --no-verify-jwt`
 - [ ] `supabase secrets set ...` ครบทุกค่า
 - [ ] กดเชื่อมต่อในเว็บแล้วได้ token จริง
-- [ ] ใส่ client id/secret ใน `scheduler/.env`

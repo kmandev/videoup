@@ -16,7 +16,7 @@ function Landing({ currentPlan, onSelectPlan, onGetStarted }) {
           <h1 className="land-h1">ปล่อยคลิปขาย<br /><span className="hl">ทุกแพลตฟอร์ม</span> ในคลิกเดียว</h1>
           <p className="land-lead">
             VideoUp ช่วยนักขายและสาย affiliate อัปวิดีโอสั้นขึ้น TikTok, YouTube Shorts, Shopee และ Lazada
-            พร้อมแคปชั่นและลิงก์ขายแยกแต่ละแพลตฟอร์ม ตั้งเวลาล่วงหน้าได้ รันบน Raspberry Pi ที่บ้าน
+            พร้อมแคปชั่นและลิงก์ขายแยกแต่ละแพลตฟอร์ม ตั้งเวลาล่วงหน้าได้ ระบบโพสต์ให้อัตโนมัติบนคลาวด์
           </p>
           <div className="land-cta-row">
             <Btn variant="primary" icon="rocket" onClick={onGetStarted}>เริ่มใช้ฟรี</Btn>

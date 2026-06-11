@@ -17,12 +17,9 @@
       ▼
  ┌─────────────┐     PostgreSQL + Auth + Realtime + Storage
  │  Supabase   │ ◄── ฐานข้อมูล + ระบบสมาชิก (ฟรี)
- └─────────────┘
-      ▲  poll คิวที่ถึงเวลา (ทุก 1 นาที)
-      │
- ┌─────────────┐     อัปโหลดจริงไปแต่ละแพลตฟอร์ม
- │ Raspberry   │ ◄── เครื่องที่บ้าน (ฟรี — ใช้ของเดิม)
- │   Pi 4B     │     ดึงไฟล์จาก Google Drive แล้วโพสต์
+ │             │
+ │ pg_cron ───►│ Edge Functions (oauth, scan, publish, telegram)
+ │ ทุก 1 นาที   │ อัปโหลดจริงไปแต่ละแพลตฟอร์ม — รันบน cloud ทั้งหมด
  └─────────────┘
 ```
 
@@ -30,8 +27,7 @@
 |---|---|---|
 | **โฮสต์เว็บ** | **Vercel** ⭐ | ไม่ต้อง build, deploy จาก Git ใน 1 คลิก, โดเมน `.vercel.app` ฟรี, bandwidth 100GB/เดือน |
 | ทางเลือกโฮสต์ | Netlify / Cloudflare Pages / GitHub Pages | ฟรีเหมือนกัน — เลือกอันใดก็ได้ |
-| **ฐานข้อมูล + Auth** | **Supabase** ⭐ | Postgres 500MB, ผู้ใช้ไม่จำกัด, Realtime, Storage 1GB — ฟรี |
-| **ตัวอัปโหลดจริง** | **Raspberry Pi 4B** | ตามแผนเดิม รันที่บ้าน ไม่มีค่าโฮสต์ |
+| **ฐานข้อมูล + Auth + Scheduler** | **Supabase** ⭐ | Postgres 500MB, ผู้ใช้ไม่จำกัด, Realtime, Storage 1GB, Edge Functions + pg_cron — ฟรี |
 | **เก็บไฟล์วิดีโอ** | Google Drive / Dropbox / OneDrive | ตามแผนเดิม |
 
 > **ทำไมเลือก Vercel + Supabase:** ทั้งคู่มี free tier ถาวร (ไม่ใช่ทดลอง), ตั้งค่าง่าย,
@@ -89,48 +85,52 @@ vercel --prod   # ขึ้น production
 
 ---
 
-## 4. ตั้งค่า Raspberry Pi (ตัวอัปโหลดจริง)
+## 4. Deploy Edge Functions + ตั้งเวลาด้วย pg_cron (ตัวอัปโหลดจริง)
 
-บน Pi (Raspberry Pi OS):
+ทุกอย่างรันบน Supabase — ไม่ต้องมีเครื่องที่บ้าน
+
 ```sh
-# 1. ติดตั้ง Node 18+
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
+npm i -g supabase
+supabase login
+supabase link --project-ref <project-ref>
 
-# 2. ดึงโค้ด
-git clone <repo> ~/videoup && cd ~/videoup/scheduler
-npm install
-
-# 3. ตั้งค่า secret
-cp .env.example .env
-nano .env      # กรอก SUPABASE_URL และ SUPABASE_SERVICE_KEY (service_role!)
-
-# 4. ทดสอบรัน
-npm start      # ควรเห็น "🚀 VideoUp Scheduler เริ่มทำงาน"
+# deploy ฟังก์ชันที่ใช้
+supabase functions deploy oauth-source --no-verify-jwt
+supabase functions deploy oauth-platform --no-verify-jwt
+supabase functions deploy scan-source --no-verify-jwt
+supabase functions deploy upload-source --no-verify-jwt
+supabase functions deploy publish-post --no-verify-jwt
+supabase functions deploy publish-local --no-verify-jwt
+supabase functions deploy telegram-test --no-verify-jwt
 ```
 
-ให้รันอัตโนมัติตลอด (แม้ไฟดับแล้วเปิดใหม่):
+ตั้ง secrets (client id/secret ของแต่ละ provider + bot token):
 ```sh
-sudo cp videoup-scheduler.service /etc/systemd/system/
-# แก้ User/WorkingDirectory ในไฟล์ให้ตรงเครื่อง
-sudo systemctl enable --now videoup-scheduler
-sudo journalctl -u videoup-scheduler -f   # ดู log สด
+supabase secrets set \
+  GOOGLE_CLIENT_ID=xxx GOOGLE_CLIENT_SECRET=xxx \
+  DROPBOX_CLIENT_ID=xxx DROPBOX_CLIENT_SECRET=xxx \
+  ONEDRIVE_CLIENT_ID=xxx ONEDRIVE_CLIENT_SECRET=xxx \
+  TELEGRAM_BOT_TOKEN=xxx \
+  CRON_SECRET=<สุ่มสตริงยาวๆ>
 ```
 
-> ⚠️ **service_role key** อยู่บน Pi เท่านั้น ห้ามใส่ในเว็บหรือ commit ขึ้น Git
-> มันข้าม RLS ได้ (จำเป็นเพราะ Pi ทำงานแทนผู้ใช้ทุกคน)
+จากนั้นรัน [`db/cron.sql`](db/cron.sql) ใน Supabase SQL Editor — จะตั้ง `pg_cron` job
+ให้เรียก `publish-post` ทุก 1 นาทีพร้อม `CRON_SECRET` (แทน service_role key ที่ไม่ควรอยู่ใน SQL)
+
+> ⚠️ **service_role key** ใช้เฉพาะ**ภายใน** Edge Function runtime (ฉีดให้อัตโนมัติ)
+> ห้ามใส่ในเว็บ, SQL, หรือ commit ขึ้น Git — `CRON_SECRET` คือสิ่งเดียวที่ pg_cron ต้องรู้
 
 ---
 
 ## 5. ต่อ API แพลตฟอร์มจริง
 
-ตอนนี้ [`scheduler/platforms.js`](scheduler/platforms.js) เป็น **stub** (จำลองอัปโหลด)
-ให้ระบบ flow ทำงานครบ end-to-end ทดสอบได้เลย เมื่อพร้อมต่อจริงให้แก้ที่จุด `TODO`:
+ตอนนี้รองรับ **YouTube Shorts** จริงแล้ว (ผ่าน YouTube Data API v3 ใน `publish-post`/`publish-local`)
+แพลตฟอร์มอื่นยังเป็น TODO — เพิ่มได้ในไฟล์เดียวกัน:
 
 | แพลตฟอร์ม | API ที่ใช้ | ต้องสมัคร |
 |---|---|---|
+| YouTube Shorts | YouTube Data API v3 (`videos.insert`) ✅ | Google Cloud Console |
 | TikTok | Content Posting API | TikTok for Developers |
-| YouTube Shorts | YouTube Data API v3 (`videos.insert`) | Google Cloud Console |
 | Facebook Reels | Graph API `/video_reels` | Meta for Developers |
 | Shopee Video | Shopee Open Platform | Shopee Open Platform |
 | Lazada | Lazada Open Platform | Lazada Open Platform |
@@ -145,7 +145,7 @@ sudo journalctl -u videoup-scheduler -f   # ดู log สด
 - [ ] กรอก `config.js`
 - [ ] Deploy เว็บขึ้น Vercel
 - [ ] สมัครสมาชิกผ่านหน้า `auth.html` (สร้าง user จริงใน Supabase)
-- [ ] ตั้ง Pi + กรอก `.env` + เปิด systemd service
-- [ ] (เมื่อพร้อม) ต่อ API แพลตฟอร์มจริงใน `platforms.js`
+- [ ] Deploy Edge Functions + ตั้ง secrets + รัน `db/cron.sql`
+- [ ] (เมื่อพร้อม) ต่อ API แพลตฟอร์มอื่นเพิ่มใน `publish-post`/`publish-local`
 
 ทั้งหมดนี้ **ค่าใช้จ่าย 0 บาท** จนกว่าจะโตเกิน free tier 🎉

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**VideoUp** — a multi-platform short-video upload manager. Users pick clips from cloud storage (Google Drive, Dropbox, OneDrive, or direct URL), write per-platform captions/hashtags/affiliate links, then schedule or instantly post to TikTok, YouTube Shorts, Facebook Reels, Shopee Video, and Lazada. A Raspberry Pi 4B at home runs the actual upload scheduler; files live in cloud storage. The UI is Thai + English bilingual.
+**VideoUp** — a multi-platform short-video upload manager. Users pick clips from cloud storage (Google Drive, Dropbox, OneDrive, or direct URL), write per-platform captions/hashtags/affiliate links, then schedule or instantly post to TikTok, YouTube Shorts, Facebook Reels, Shopee Video, and Lazada. Scheduled posts run entirely in the cloud via Supabase Edge Functions + pg_cron; files live in cloud storage. The UI is Thai + English bilingual.
 
 ## Running the app
 
@@ -61,7 +61,7 @@ Client-side only: `route` state string in `App` (`"dashboard"` | `"calendar"` | 
 
 UI mock/static data lives in `data.jsx` and `saas-data.jsx`. `postStatus(post)` derives an aggregate status from per-platform statuses. `platformStats()` returns published/failed/scheduled counts per platform. The `CreatePost` → `onPublish(payload)` callback in `App` triggers a toast and navigates to dashboard or calendar.
 
-## Backend (Supabase + Raspberry Pi)
+## Backend (Supabase)
 
 The app runs in two modes, switched automatically by whether `config.js` has credentials:
 
@@ -76,7 +76,7 @@ The app runs in two modes, switched automatically by whether `config.js` has cre
 | `supabase-client.js` | Creates `window.sb`, or `null` in demo mode |
 | `api.js` | `window.API` — data access layer; every method falls back to `DEMO_MODE` when `sb` is null |
 | `db/schema.sql` | Full Postgres schema: profiles, sources, platform_connections, videos, posts, post_platforms, subscriptions, user_settings + RLS + `posts_full` view. Run once in Supabase SQL Editor |
-| `scheduler/` | Node worker for the Raspberry Pi (`index.js` polls due posts, `platforms.js` has per-platform upload adapters — currently stubs with `TODO` markers) |
+| `supabase/functions/` | Edge Functions (Deno): OAuth, source scanning/upload, publishing, Telegram notifications |
 | `vercel.json` | Static deploy config (cleanUrls + security headers) |
 | `DEPLOY.md` | Full Thai deployment guide + free-tier stack analysis |
 
@@ -86,4 +86,4 @@ The app runs in two modes, switched automatically by whether `config.js` has cre
 
 ### Scheduler model
 
-The Pi uses the **service_role** key (in `scheduler/.env`, never committed, bypasses RLS) to poll `posts` where `scheduled_at <= now`, process each `post_platforms` row (fetch file → upload → mark published/failed), aggregate post status, and run cleanup. Realtime status flows back to the UI via `API.subscribePosts()`.
+`pg_cron` calls the `publish-post` Edge Function every minute with `{ due: true }` and a `CRON_SECRET` bearer token. The function (using the **service_role** key, server-side only) polls `posts` where `scheduled_at <= now`, processes each `post_platforms` row (fetch file from cloud source → upload to platform → mark published/failed), aggregates post status, sends Telegram notifications, and runs cleanup. Realtime status flows back to the UI via `API.subscribePosts()`.
