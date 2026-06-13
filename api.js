@@ -194,20 +194,21 @@
       return ok(await window.sb.from('posts_full').select('*').order('scheduled_at'));
     },
 
-    // payload จาก CreatePost: { vid, platforms[], mode, when, title, cleanup, cleanupDelay, content{} }
+    // payload จาก CreatePost: { vid, platforms[], mode, when, title, cleanup, cleanupDelay, content{}, asDraft }
     async createPost(payload) {
       if (!window.sb) demo();
       const u = await API.auth.current();
       const isNow = payload.mode === 'now';
+      const isDraft = !!payload.asDraft;
       const post = ok(await window.sb.from('posts').insert({
         user_id: u.id,
         video_id: payload.vid,
         title: payload.title,
-        mode: payload.mode,
-        scheduled_at: isNow ? new Date().toISOString() : new Date(payload.scheduledISO).toISOString(),
+        mode: payload.mode === 'now' ? 'now' : 'later',
+        scheduled_at: isNow ? new Date().toISOString() : (payload.scheduledISO ? new Date(payload.scheduledISO).toISOString() : null),
         cleanup: payload.cleanup,
         cleanup_delay: payload.cleanupDelay,
-        status: 'scheduled',
+        status: isDraft ? 'draft' : 'scheduled',
       }).select().single());
 
       const rows = payload.platforms.map(pl => ({
@@ -217,15 +218,17 @@
         caption: payload.content?.[pl]?.caption || '',
         hashtags: payload.content?.[pl]?.hashtags || '',
         affiliate_link: payload.content?.[pl]?.link || '',
-        status: 'scheduled',
+        status: isDraft ? 'draft' : 'scheduled',
       }));
       // insert พร้อม title — ถ้า DB ยังไม่มีคอลัมน์ title ให้ retry แบบไม่มี (กันพัง)
-      let res = await window.sb.from('post_platforms').insert(rows);
-      if (res.error && /title/.test(res.error.message || '')) {
-        const noTitle = rows.map(({ title, ...r }) => r);
-        res = await window.sb.from('post_platforms').insert(noTitle);
+      if (rows.length > 0) {
+        let res = await window.sb.from('post_platforms').insert(rows);
+        if (res.error && /title/.test(res.error.message || '')) {
+          const noTitle = rows.map(({ title, ...r }) => r);
+          res = await window.sb.from('post_platforms').insert(noTitle);
+        }
+        if (res.error) throw res.error;
       }
-      if (res.error) throw res.error;
       return post;
     },
 

@@ -217,6 +217,11 @@ function App() {
 
     // Demo mode — แค่ toast
     if (!window.API || !window.API.isLive()) {
+      if (payload.asDraft) {
+        pushToast({ kind: "scheduled", title: "บันทึกฉบับร่างแล้ว ✓ (demo)", desc: payload.title });
+        go("dashboard");
+        return;
+      }
       pushToast({
         kind: payload.mode === "now" ? "publishing" : "scheduled",
         title: payload.mode === "now" ? "ส่งเข้าคิวแล้ว! 🚀" : "ตั้งเวลาเรียบร้อย ✓",
@@ -230,6 +235,15 @@ function App() {
     try {
       // ถ้าแก้ไขโพสต์เดิม → ลบของเก่าก่อน (สร้างใหม่แทน)
       if (payload.editPostId) { try { await window.API.deletePost(payload.editPostId); } catch (_) {} }
+
+      // ── บันทึกฉบับร่าง — ไม่อัปโหลด/โพสต์ใดๆ แค่เก็บข้อมูลไว้แก้ไขทีหลัง ──
+      if (payload.asDraft) {
+        await window.API.createPost(payload);
+        pushToast({ kind: "scheduled", title: "บันทึกฉบับร่างแล้ว ✓", desc: payload.title });
+        await reloadLibrary();
+        go("dashboard");
+        return;
+      }
 
       // ── กรณีไฟล์จากเครื่อง ──
       if (payload.localFile) {
@@ -275,6 +289,33 @@ function App() {
 
   const upcomingCount = posts.filter(p => ["scheduled", "publishing"].includes(postStatus(p))).length;
 
+  // เปิดหน้าสร้างโพสต์เพื่อแก้ไขโพสต์/ฉบับร่างเดิม (โหลดเนื้อหารายแพลตฟอร์มมาเติม)
+  const editPost = async (post) => {
+    let content = {}, platforms = Object.keys(post.platforms || {});
+    if (window.API?.isLive() && post.id) {
+      try {
+        const rows = await window.API.getPostPlatforms(post.id);
+        platforms = rows.map(r => r.platform);
+        rows.forEach(r => content[r.platform] = { title: r.title || "", caption: r.caption || "", hashtags: r.hashtags || "", link: r.affiliate_link || "" });
+      } catch (e) {}
+    }
+    const when = post.when instanceof Date ? post.when : new Date(post.scheduled_at || Date.now());
+    setCreateSeed({
+      vid: post.video_id || post.vid, date: when,
+      platforms, content, editPostId: post.id, mode: post.mode || "later",
+      time: `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`,
+    });
+    go("create");
+  };
+
+  const deleteDraft = async (post) => {
+    if (window.API && window.API.isLive()) {
+      try { await window.API.deletePost(post.id); } catch (e) { pushToast({ kind: "scheduled", title: "ลบไม่สำเร็จ", desc: e.message }); return; }
+      await reloadLibrary();
+    }
+    pushToast({ kind: "scheduled", title: "ลบฉบับร่างแล้ว", desc: post.title });
+  };
+
   const requestPlan = (planId) => { if (planId !== plan) setUpgradeTo(planId); };
   const confirmPlan = () => {
     const order = { free: 0, pro: 1, business: 2 };
@@ -287,7 +328,7 @@ function App() {
   };
 
   let screen;
-  if (route === "dashboard") screen = <Dashboard go={go} openCreate={() => openCreate()} openPost={openPost} posts={posts} connectedPlatforms={connectedPlatforms} primarySource={(liveSources || []).find(s => s.total_gb > 0) || (liveSources || [])[0]} />;
+  if (route === "dashboard") screen = <Dashboard go={go} openCreate={() => openCreate()} openPost={openPost} posts={posts} connectedPlatforms={connectedPlatforms} primarySource={(liveSources || []).find(s => s.total_gb > 0) || (liveSources || [])[0]} onEditDraft={editPost} onDeleteDraft={deleteDraft} />;
   else if (route === "calendar") screen = <Calendar openCreate={openCreate} openPost={openPost} posts={posts} />;
   else if (route === "products") screen = <ProductsScreen onToast={pushToast} />;
   else if (route === "billing")  screen = <Billing currentPlan={plan} onChangePlan={requestPlan} onToast={pushToast} />;
@@ -441,22 +482,7 @@ function App() {
       {detail && <PostDetail post={detail} onClose={() => setDetail(null)}
         onEdit={async () => {
           const post = detail; setDetail(null);
-          // โหลดเนื้อหาเดิมรายแพลตฟอร์มมาเติมในหน้าสร้างโพสต์
-          let content = {}, platforms = Object.keys(post.platforms || {});
-          if (window.API?.isLive() && post.id) {
-            try {
-              const rows = await window.API.getPostPlatforms(post.id);
-              platforms = rows.map(r => r.platform);
-              rows.forEach(r => content[r.platform] = { title: r.title || "", caption: r.caption || "", hashtags: r.hashtags || "", link: r.affiliate_link || "" });
-            } catch (e) {}
-          }
-          const when = post.when instanceof Date ? post.when : new Date(post.scheduled_at || Date.now());
-          setCreateSeed({
-            vid: post.video_id || post.vid, date: when,
-            platforms, content, editPostId: post.id, mode: post.mode || "later",
-            time: `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`,
-          });
-          go("create");
+          await editPost(post);
         }}
         onToast={pushToast} />}
 

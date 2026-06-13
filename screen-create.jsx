@@ -8,6 +8,7 @@ const CONTENT_TPL = {
   shopee:   { caption: "", hashtags: "#ShopeeหาดของถูกบนShopee #รีวิวShopee", link: "" },
   lazada:   { caption: "", hashtags: "#LazadaTH #ดีลเด็ด", link: "" },
 };
+const MAX_FILE_MB = 400;
 const LINK_PH = {
   tiktok:   "https://vt.tiktok.com/aff/xxxx",
   youtube:  "https://s.shopee.co.th/xxxx (ลิงก์ในคำอธิบาย)",
@@ -44,6 +45,10 @@ function CreatePost({ initialVid, initialDate, initialPlatforms, initialContent,
   const pickLocal = (e) => {
     const file = e.target.files?.[0]; e.target.value = "";
     if (!file) return;
+    if (file.size > MAX_FILE_MB * 1048576) {
+      onToast?.({ kind: "scheduled", title: "ไฟล์ใหญ่เกินไป", desc: `ไฟล์วิดีโอต้องไม่เกิน ${MAX_FILE_MB}MB (ไฟล์นี้ ${Math.round(file.size / 1048576)}MB)` });
+      return;
+    }
     if (localUrl) URL.revokeObjectURL(localUrl);
     setLocalFile(file); setLocalUrl(URL.createObjectURL(file)); setVid("__local__");
     onToast?.({ kind: "publishing", title: "เลือกไฟล์จากเครื่องแล้ว ✓", desc: file.name });
@@ -74,6 +79,10 @@ function CreatePost({ initialVid, initialDate, initialPlatforms, initialContent,
     const KNOWN = ["mp4", "mov", "webm", "avi", "mkv", "m4v", "3gp", "mpeg4"];
     if (!KNOWN.includes(ext)) {
       onToast?.({ kind: "scheduled", title: "ไฟล์ไม่รองรับ", desc: `.${ext} ไม่ใช่ไฟล์วิดีโอที่รองรับ — ใช้ ${SAFE_FORMAT} จะดีที่สุด` });
+      return;
+    }
+    if (file.size > MAX_FILE_MB * 1048576) {
+      onToast?.({ kind: "scheduled", title: "ไฟล์ใหญ่เกินไป", desc: `ไฟล์วิดีโอต้องไม่เกิน ${MAX_FILE_MB}MB (ไฟล์นี้ ${Math.round(file.size / 1048576)}MB)` });
       return;
     }
     // เตือนถ้าไม่ใช่ mp4 (บางแพลตฟอร์มเช่น Shopee/Lazada รับเฉพาะ mp4)
@@ -201,6 +210,26 @@ function CreatePost({ initialVid, initialDate, initialPlatforms, initialContent,
     } finally { setPublishing(false); }
   };
 
+  // บันทึกฉบับร่าง — ไม่ต้องกรอกครบ ไว้กลับมาแก้ไขทีหลังได้
+  const [savingDraft, setSavingDraft] = useState(false);
+  const canSaveDraft = !!v && !v.local;
+  const saveDraft = async () => {
+    if (!canSaveDraft || savingDraft || publishing) return;
+    setSavingDraft(true);
+    try {
+      await onPublish({
+        vid, platforms: selectedPlats, mode,
+        when: mode === "now" ? "ทันที" : `${date} ${time}`,
+        scheduledISO: `${date}T${time}:00`,
+        title: v.title,
+        content, cleanup, cleanupDelay,
+        source: v.source,
+        editPostId,
+        asDraft: true,
+      });
+    } finally { setSavingDraft(false); }
+  };
+
   return (
     <div className="create-wrap">
       <div className="steps">
@@ -255,6 +284,9 @@ function CreatePost({ initialVid, initialDate, initialPlatforms, initialContent,
               เลือกจากเครื่อง
             </Btn>
           </div>
+          <div className="muted" style={{ fontSize: 11.5, fontWeight: 600, marginTop: 6, marginBottom: 12 }}>
+            รองรับไฟล์วิดีโอสูงสุด {MAX_FILE_MB}MB ต่อคลิป
+          </div>
 
           {/* ไฟล์จากเครื่องที่เลือก */}
           {localFile && (
@@ -264,7 +296,7 @@ function CreatePost({ initialVid, initialDate, initialPlatforms, initialContent,
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 800, fontSize: 13.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{localFile.name}</div>
-                <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>ไฟล์จากเครื่อง · {Math.round(localFile.size / 1048576)} MB · โพสต์ทันทีไม่เก็บ Cloud / ตั้งเวลาจะอัปขึ้น Cloud ให้</div>
+                <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>ไฟล์จากเครื่อง · {Math.round(localFile.size / 1048576)} MB / {MAX_FILE_MB} MB · โพสต์ทันทีไม่เก็บ Cloud / ตั้งเวลาจะอัปขึ้น Cloud ให้</div>
               </div>
               <Btn size="sm" variant="ghost" icon="x" onClick={() => { if (localUrl) URL.revokeObjectURL(localUrl); setLocalFile(null); setLocalUrl(null); setVid(null); }}>เอาออก</Btn>
             </div>
@@ -623,6 +655,10 @@ function CreatePost({ initialVid, initialDate, initialPlatforms, initialContent,
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
           <Btn variant="ghost" onClick={onCancel}>ยกเลิก</Btn>
+          <Btn variant="ghost" icon="edit" disabled={!canSaveDraft || savingDraft || publishing} onClick={saveDraft}
+            title={!canSaveDraft ? "ไฟล์จากเครื่องต้องอัปโหลดขึ้น Cloud ก่อนจึงบันทึกฉบับร่างได้" : ""}>
+            {savingDraft ? "กำลังบันทึก..." : "บันทึกฉบับร่าง"}
+          </Btn>
           <Btn variant="primary" icon={mode === "now" ? "rocket" : "calendar"} disabled={!canPublish || publishing} onClick={doPublish}>
             {publishing ? (mode === "now" ? "กำลังโพสต์..." : "กำลังบันทึก...") : (mode === "now" ? "โพสต์เลย" : "ยืนยันตั้งเวลา")}
           </Btn>

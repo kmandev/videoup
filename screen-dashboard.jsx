@@ -1,7 +1,7 @@
 /* ============================================================
    VideoUp — Dashboard screen
    ============================================================ */
-function Dashboard({ go, openCreate, openPost, posts: propPosts, connectedPlatforms, primarySource }) {
+function Dashboard({ go, openCreate, openPost, posts: propPosts, connectedPlatforms, primarySource, onEditDraft, onDeleteDraft }) {
   const allPosts = propPosts || POSTS;
   const platList = (connectedPlatforms && connectedPlatforms.length >= 0) ? connectedPlatforms : PLATFORM_LIST;
 
@@ -27,6 +27,7 @@ function Dashboard({ go, openCreate, openPost, posts: propPosts, connectedPlatfo
   const now = TODAY;
   const in24 = new Date(now); in24.setHours(now.getHours() + 24);
 
+  const draftPosts = allPosts.filter(p => postStatus(p) === "draft");
   const scheduledPosts = allPosts.filter(p => ["scheduled", "publishing"].includes(postStatus(p)));
   const upcoming = scheduledPosts.filter(p => p.when >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))
     .sort((a, b) => a.when - b.when);
@@ -138,6 +139,28 @@ function Dashboard({ go, openCreate, openPost, posts: propPosts, connectedPlatfo
 
         {/* right column */}
         <div className="grid" style={{ gap: 18 }}>
+          {/* drafts */}
+          {draftPosts.length > 0 && (
+            <div className="card card-pad">
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+                <h2 className="section-title">ฉบับร่าง</h2>
+                <span className="badge mute" style={{ marginLeft: "auto" }}>{draftPosts.length}</span>
+              </div>
+              {draftPosts.slice(0, 5).map(p => (
+                <div key={p.id} className="upcoming-item" style={{ cursor: "pointer" }} onClick={() => onEditDraft?.(p)}>
+                  <div className="thumb"><VideoThumb vid={p.vid || { dur: p.video_duration || 0, cover: p.video_cover }} showPlay={false} /></div>
+                  <div className="meta">
+                    <div className="ttl">{p.title}</div>
+                    <div className="when">
+                      <Icon name="edit" size={13} />ยังไม่เผยแพร่ · {Object.keys(p.platforms || {}).length} แพลตฟอร์ม
+                    </div>
+                  </div>
+                  <Btn size="sm" variant="ghost" icon="trash" onClick={(e) => { e.stopPropagation(); onDeleteDraft?.(p); }} />
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* storage status */}
           <div className="card card-pad">
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
