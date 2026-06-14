@@ -134,22 +134,79 @@
       return j; // { added, total }
     },
 
-    // อัปโหลดไฟล์เข้า cloud source (ผ่าน Edge Function) → คืน video record
-    async uploadToSource(sourceId, file) {
+    // อัปโหลดไฟล์เข้า cloud source → คืน video record
+    //  - gdrive/onedrive: อัปจาก browser ตรงไป cloud (resumable, รองรับไฟล์ใหญ่ 400MB)
+    //  - dropbox/อื่นๆ: fallback ส่งผ่าน Edge Function (ไฟล์เล็ก)
+    //  onProgress(fraction 0..1) เรียกระหว่างอัป (optional)
+    async uploadToSource(sourceId, file, onProgress) {
       if (!window.sb) demo();
       const { data: { session } } = await window.sb.auth.getSession();
       if (!session) throw new Error('กรุณาเข้าสู่ระบบก่อน');
-      const fd = new FormData();
-      fd.append('sourceId', sourceId);
-      fd.append('file', file);
-      const res = await fetch(`${window.SUPABASE_URL}/functions/v1/upload-source`, {
+      const fnUrl = `${window.SUPABASE_URL}/functions/v1/upload-source`;
+      const authHdr = { Authorization: `Bearer ${session.access_token}` };
+
+      // 1) init — ขอ resumable upload URL (หรือสัญญาณให้ fallback)
+      const initRes = await fetch(fnUrl, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        body: fd,
+        headers: { ...authHdr, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'init', sourceId, name: file.name, size: file.size, type: file.type || 'video/mp4' }),
       });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j.error || 'อัปโหลดไม่สำเร็จ');
-      return j.video;
+      const init = await initRes.json();
+      if (!initRes.ok) throw new Error(init.error || 'เริ่มอัปโหลดไม่สำเร็จ');
+
+      // 2a) fallback (dropbox/ไฟล์เล็ก) — ส่งไฟล์ผ่าน Edge Function แบบเดิม
+      if (init.fallback) {
+        const fd = new FormData();
+        fd.append('sourceId', sourceId);
+        fd.append('file', file);
+        const res = await fetch(fnUrl, { method: 'POST', headers: authHdr, body: fd });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'อัปโหลดไม่สำเร็จ');
+        return j.video;
+      }
+
+      // 2b) อัปไฟล์ตรงไป cloud (chunked PUT ไป session URL ที่ pre-authorized แล้ว)
+      const file_path = await API._putChunked(init.uploadUrl, file, init.provider, init.path, onProgress);
+
+      // 3) finalize — บันทึก video record ฝั่ง server
+      const finRes = await fetch(fnUrl, {
+        method: 'POST',
+        headers: { ...authHdr, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'finalize', sourceId, name: file.name, size: file.size, type: file.type || 'video/mp4', file_path }),
+      });
+      const fin = await finRes.json();
+      if (!finRes.ok) throw new Error(fin.error || 'บันทึกไฟล์ไม่สำเร็จ');
+      return fin.video;
+    },
+
+    // อัปไฟล์เป็น chunk ไป resumable session URL → คืน file_path (Drive=file id, OneDrive=dest path)
+    async _putChunked(uploadUrl, file, provider, destPath, onProgress) {
+      const CHUNK = 10 * 1024 * 1024; // 10 MiB (ทวีคูณของ 320 KiB ตามที่ OneDrive ต้องการ)
+      const total = file.size;
+      let start = 0, lastJson = null;
+      while (start < total) {
+        const end = Math.min(start + CHUNK, total);
+        const blob = file.slice(start, end);
+        const res = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Range': `bytes ${start}-${end - 1}/${total}` },
+          body: blob,
+        });
+        // 200/201 = เสร็จ, 308 (Drive) / 202 (OneDrive) = ยังไม่เสร็จ ส่ง chunk ถัดไป
+        if (res.status === 200 || res.status === 201) {
+          lastJson = await res.json().catch(() => null);
+        } else if (res.status !== 308 && res.status !== 202) {
+          throw new Error(`อัปโหลด chunk ล้มเหลว (${res.status}): ${await res.text().catch(() => '')}`);
+        }
+        start = end;
+        if (onProgress) onProgress(end / total);
+      }
+      if (provider === 'gdrive') {
+        if (!lastJson || !lastJson.id) throw new Error('อัปโหลด Drive ไม่สำเร็จ (ไม่ได้ file id)');
+        return lastJson.id;
+      }
+      // onedrive: เก็บ dest path (รูปแบบเดิมที่ publish-post ใช้ดึงไฟล์)
+      return destPath;
     },
 
     async listVideos(sourceId) {

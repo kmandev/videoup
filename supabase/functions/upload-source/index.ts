@@ -65,6 +65,21 @@ async function gdriveFolderId(token: string, path: string): Promise<string> {
   return parent;
 }
 
+// OneDrive dest path จาก source.path + ชื่อไฟล์
+const onedriveDest = (source: any, name: string) =>
+  `${(source.path || "").replace(/\/$/, "")}/${name}`;
+
+// บันทึก video record (ใช้ทั้ง multipart และ finalize ของ resumable upload)
+async function insertVideo(userId: string, sourceId: string, name: string, sizeMb: number, file_path: string) {
+  const cover = "linear-gradient(135deg,#6C4DFF,#2D7BFF)";
+  const { data: video } = await admin.from("videos").insert({
+    user_id: userId, source_id: sourceId,
+    title: name.replace(/\.[^.]+$/, ""), file_path,
+    size_mb: sizeMb, duration: 0, cover, status: "ready",
+  }).select().single();
+  return video;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
@@ -73,6 +88,67 @@ Deno.serve(async (req) => {
   const { data: { user }, error } = await admin.auth.getUser(jwt);
   if (error || !user) return json({ error: "unauthorized" }, 401);
 
+  const ctype = req.headers.get("Content-Type") || "";
+
+  // ── โหมด JSON: resumable upload (อัปจาก browser ตรงไป cloud) ──
+  //    action:"init"     → คืน uploadUrl (pre-authorized) ให้ browser อัปไฟล์เอง
+  //    action:"finalize" → บันทึก video record หลัง browser อัปเสร็จ
+  if (ctype.includes("application/json")) {
+    const body = await req.json().catch(() => ({}));
+    const { action, sourceId } = body;
+    if (!sourceId) return json({ error: "ต้องมี sourceId" }, 400);
+    const { data: source } = await admin.from("sources").select("*").eq("id", sourceId).eq("user_id", user.id).single();
+    if (!source) return json({ error: "ไม่พบ source" }, 404);
+
+    try {
+      if (action === "init") {
+        const name = String(body.name || "video.mp4");
+        const type = String(body.type || "video/mp4");
+        const token = await freshToken(source);
+
+        if (source.type === "gdrive") {
+          const folderId = await gdriveFolderId(token, source.path);
+          const r = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": type },
+            body: JSON.stringify({ name, parents: [folderId] }),
+          });
+          if (!r.ok) throw new Error(`เริ่ม resumable (Drive) ล้มเหลว: ${await r.text()}`);
+          const uploadUrl = r.headers.get("Location");
+          if (!uploadUrl) throw new Error("ไม่ได้ session URL จาก Drive");
+          return json({ uploadUrl, provider: "gdrive" });
+        }
+        if (source.type === "onedrive") {
+          const dest = onedriveDest(source, name);
+          const r = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:${encodeURI(dest)}:/createUploadSession`, {
+            method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "rename" } }),
+          });
+          const j = await r.json();
+          if (!r.ok || !j.uploadUrl) throw new Error(`เริ่ม session (OneDrive) ล้มเหลว: ${JSON.stringify(j)}`);
+          return json({ uploadUrl: j.uploadUrl, provider: "onedrive", path: dest });
+        }
+        // dropbox: ไม่มี pre-signed URL → ให้ browser ใช้ทาง multipart เดิม (ไฟล์เล็ก)
+        return json({ provider: source.type, fallback: true });
+      }
+
+      if (action === "finalize") {
+        const name = String(body.name || "video.mp4");
+        const sizeMb = Math.round((Number(body.size) || 0) / 1048576);
+        const file_path = String(body.file_path || "");
+        if (!file_path) return json({ error: "ต้องมี file_path" }, 400);
+        const video = await insertVideo(user.id, sourceId, name, sizeMb, file_path);
+        return json({ video });
+      }
+
+      return json({ error: `action ไม่รองรับ: ${action}` }, 400);
+    } catch (e) {
+      console.error("upload init/finalize error", e);
+      return json({ error: String((e as any)?.message || e) }, 500);
+    }
+  }
+
+  // ── โหมด multipart เดิม: ส่งไฟล์ผ่าน function (Dropbox / ไฟล์เล็ก) ──
   const form = await req.formData();
   const sourceId = form.get("sourceId") as string;
   const file = form.get("file") as File;
@@ -123,13 +199,7 @@ Deno.serve(async (req) => {
       file_path = dest;
     } else return json({ error: `source type ไม่รองรับ: ${source.type}` }, 400);
 
-    const cover = "linear-gradient(135deg,#6C4DFF,#2D7BFF)";
-    const { data: video } = await admin.from("videos").insert({
-      user_id: user.id, source_id: sourceId,
-      title: name.replace(/\.[^.]+$/, ""), file_path,
-      size_mb: sizeMb, duration: 0, cover, status: "ready",
-    }).select().single();
-
+    const video = await insertVideo(user.id, sourceId, name, sizeMb, file_path);
     return json({ video });
   } catch (e) {
     console.error("upload error", e);

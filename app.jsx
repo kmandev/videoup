@@ -185,8 +185,12 @@ function App() {
   const pushToast = (toast) => {
     const id = Math.random().toString(36).slice(2);
     setToasts(ts => [...ts, { id, ...toast }]);
-    setTimeout(() => setToasts(ts => ts.filter(x => x.id !== id)), 4200);
+    // sticky:true = ไม่หายเอง (ใช้ตอนอัปโหลดที่มี progress) — ต้องเรียก dismissToast(id) เอง
+    if (!toast.sticky) setTimeout(() => setToasts(ts => ts.filter(x => x.id !== id)), 4200);
+    return id;
   };
+  const updateToast = (id, patch) => setToasts(ts => ts.map(x => x.id === id ? { ...x, ...patch } : x));
+  const dismissToast = (id) => setToasts(ts => ts.filter(x => x.id !== id));
 
   // แจ้งผล OAuth หลัง redirect กลับ (?source=... หรือ ?platform=...)
   useEffect(() => {
@@ -260,9 +264,12 @@ function App() {
         // ตั้งเวลา — ต้องอัปไฟล์ขึ้น cloud ก่อน เพื่อให้ระบบดึงไปโพสต์ตอนถึงเวลา
         const srcRow = (liveSources || []).find(s => s.type !== "url" && s.id);
         if (!srcRow) { pushToast({ kind: "scheduled", title: "ตั้งเวลาไม่ได้", desc: "ต้องเชื่อม Cloud (Drive/Dropbox/OneDrive) ก่อน เพื่อเก็บไฟล์ไว้โพสต์ตามเวลา" }); return; }
-        pushToast({ kind: "publishing", title: "กำลังอัปไฟล์ขึ้น Cloud เพื่อตั้งเวลา...", desc: payload.title });
-        const uploaded = await window.API.uploadToSource(srcRow.id, payload.localFile);
-        payload.vid = uploaded.id; // ใช้ video ที่เพิ่งอัป
+        const upId = pushToast({ kind: "publishing", title: "กำลังอัปไฟล์ขึ้น Cloud เพื่อตั้งเวลา...", desc: `${payload.title} · 0%`, sticky: true });
+        try {
+          const uploaded = await window.API.uploadToSource(srcRow.id, payload.localFile,
+            (frac) => updateToast(upId, { desc: `${payload.title} · ${Math.round(frac * 100)}%` }));
+          payload.vid = uploaded.id; // ใช้ video ที่เพิ่งอัป
+        } finally { dismissToast(upId); }
       }
 
       const post = await window.API.createPost(payload);
