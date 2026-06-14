@@ -312,14 +312,6 @@ function CreatePost({ initialVid, initialDate, initialPlatforms, initialContent,
             </button>
           ) : (
             <div className="vid-grid">
-              {/* tile อัปโหลดจากเครื่อง */}
-              <button onClick={() => fileRef.current?.click()} disabled={uploading} className="vid-pick"
-                style={{ border: "1.5px dashed var(--border-2)", background: "var(--surface)", display: "grid", placeItems: "center", cursor: "pointer", color: "var(--brand)" }}>
-                <div style={{ textAlign: "center" }}>
-                  <Icon name="upload" size={22} />
-                  <div style={{ fontSize: 11.5, fontWeight: 800, marginTop: 6, color: "var(--text)" }}>{uploading ? "กำลังอัป..." : "จากเครื่อง"}</div>
-                </div>
-              </button>
               {filtered.map(x => {
                 const isUrl = typeof x.cover === "string" && /^https?:\/\//.test(x.cover);
                 const coverStyle = isUrl
